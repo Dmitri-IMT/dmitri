@@ -16,6 +16,7 @@ from api.core.severity import Severity
 from .industrial import (
     ModbusAddressRangePayload,
     ModbusDeviceIdentificationPayload,
+    OpcUaObservationPayload,
 )
 from .operating_system import OperatingSystemDetection
 from .scan import (
@@ -146,6 +147,24 @@ class IndustrialServiceView(BaseModel):
     units: list[ModbusUnitView] = Field(default_factory=list)
 
 
+class OpcUaServiceView(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    protocol: Literal["opcua_tcp"]
+    port: Annotated[int, Field(ge=1, le=65535)]
+    confidence: Literal["suspected", "confirmed"]
+    evidence_sources: list[constr(min_length=1, max_length=64)] = Field(
+        default_factory=list
+    )
+    observation: OpcUaObservationPayload | None
+
+
+IndustrialServiceRead = Annotated[
+    IndustrialServiceView | OpcUaServiceView,
+    Field(discriminator="protocol"),
+]
+
+
 class ScanHostView(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -158,7 +177,7 @@ class ScanHostView(BaseModel):
     ports: list[Port]
     machine_type: MachineType | None
     device_profile: DeviceProfilePayload | None
-    industrial_services: list[IndustrialServiceView] = Field(
+    industrial_services: list[IndustrialServiceRead] = Field(
         default_factory=list
     )
     unreadable_fields: list[str] = Field(default_factory=list)
@@ -271,7 +290,7 @@ class HostDetailResponse(HostSummary):
     assessment_policy_version: constr(min_length=1) | None
     exposures: list[ExposureRead]
     ports: list[HostPort]
-    industrial_services: list[IndustrialServiceView] = Field(
+    industrial_services: list[IndustrialServiceRead] = Field(
         default_factory=list
     )
     scan_history: list[HostScanHistoryEntry]

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Annotated, Literal
 from uuid import UUID
@@ -41,10 +41,33 @@ from api.services.scan_evidence import (
     parse_coverage,
 )
 
-AI_CONTEXT_VERSION = "5"
+AI_CONTEXT_VERSION = "6"
 
 MAX_AI_FINDINGS = 15
 _REFERENCE_PATTERN = re.compile(r"\b(?:finding|machine)_[1-9][0-9]*\b")
+
+
+class IndustrialProtocolAggregate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    service_count: Annotated[int, Field(ge=0)] = 0
+    suspected_services: Annotated[int, Field(ge=0)] = 0
+    confirmed_services: Annotated[int, Field(ge=0)] = 0
+    mapping_completed: Annotated[int, Field(ge=0)] = 0
+    mapping_limited: Annotated[int, Field(ge=0)] = 0
+    mapping_not_attempted: Annotated[int, Field(ge=0)] = 0
+    anonymous_read_verified: Annotated[int, Field(ge=0)] = 0
+
+
+class IndustrialProtocolSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    modbus_tcp: IndustrialProtocolAggregate = Field(
+        default_factory=IndustrialProtocolAggregate
+    )
+    opcua_tcp: IndustrialProtocolAggregate = Field(
+        default_factory=IndustrialProtocolAggregate
+    )
 
 
 class AIFindingContext(BaseModel):
@@ -83,7 +106,7 @@ class AIFindingContext(BaseModel):
 class ScanAIContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["5"] = AI_CONTEXT_VERSION
+    context_version: Literal["6"] = AI_CONTEXT_VERSION
     scan_mode: ScanMode
     evidence_completeness: EvidenceCompleteness = "unknown"
     incomplete_check_count: Annotated[int, Field(ge=0)] = 0
@@ -99,6 +122,9 @@ class ScanAIContext(BaseModel):
     severity: SeverityBreakdown
     top_findings: Annotated[list[AIFindingContext], Field(max_length=15)]
     evidence_summary: FindingEvidenceSummary
+    industrial_protocols: IndustrialProtocolSummary = Field(
+        default_factory=IndustrialProtocolSummary
+    )
 
     _finding_ids_by_ref: dict[str, UUID] = PrivateAttr(default_factory=dict)
     _display_values_by_ref: dict[str, str] = PrivateAttr(default_factory=dict)
@@ -128,7 +154,7 @@ class MachineVulnerabilityCount(BaseModel):
 class ScanChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["5"] = AI_CONTEXT_VERSION
+    context_version: Literal["6"] = AI_CONTEXT_VERSION
     scope: Literal["scan"] = "scan"
     scan_mode: ScanMode
     status: ScanStatus
@@ -139,12 +165,15 @@ class ScanChatContext(BaseModel):
     top_findings: list[AIFindingContext]
     machine_vulnerability_summary: list[MachineVulnerabilityCount]
     evidence_summary: FindingEvidenceSummary
+    industrial_protocols: IndustrialProtocolSummary = Field(
+        default_factory=IndustrialProtocolSummary
+    )
 
 
 class FindingChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["5"] = AI_CONTEXT_VERSION
+    context_version: Literal["6"] = AI_CONTEXT_VERSION
     scope: Literal["finding"] = "finding"
     finding: AIFindingContext
     evidence_summary: FindingEvidenceSummary
@@ -153,7 +182,7 @@ class FindingChatContext(BaseModel):
 class HostChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["5"] = AI_CONTEXT_VERSION
+    context_version: Literal["6"] = AI_CONTEXT_VERSION
     scope: Literal["host"] = "host"
     machine_ref: Annotated[str, Field(pattern=r"^machine_[1-9][0-9]*$")]
     machine_type: MachineType
@@ -162,6 +191,9 @@ class HostChatContext(BaseModel):
     open_ports_count: Annotated[int, Field(ge=0)]
     findings: list[AIFindingContext]
     evidence_summary: FindingEvidenceSummary
+    industrial_protocols: IndustrialProtocolSummary = Field(
+        default_factory=IndustrialProtocolSummary
+    )
 
 
 AIChatContext = ScanChatContext | FindingChatContext | HostChatContext
@@ -304,10 +336,57 @@ def build_scan_ai_context(
         severity=risk.severity,
         top_findings=bundle.contexts,
         evidence_summary=detail.evidence_summary,
+        industrial_protocols=summarize_industrial_protocols(
+            service for host in detail.hosts for service in host.industrial_services
+        ),
     )
     context._finding_ids_by_ref = bundle.finding_ids_by_ref
     context._display_values_by_ref = bundle.display_values_by_ref
     return context
+
+
+def summarize_industrial_protocols(
+    services: Iterable[object],
+) -> IndustrialProtocolSummary:
+    """Return aggregate protocol coverage without identifiers or operational data."""
+    totals = {
+        "modbus_tcp": IndustrialProtocolAggregate(),
+        "opcua_tcp": IndustrialProtocolAggregate(),
+    }
+    for service in services:
+        protocol = getattr(service, "protocol", None)
+        if protocol not in totals:
+            continue
+        item = totals[protocol]
+        item.service_count += 1
+        confidence = getattr(service, "confidence", None)
+        if confidence == "confirmed":
+            item.confirmed_services += 1
+        else:
+            item.suspected_services += 1
+        if protocol == "opcua_tcp":
+            observation = getattr(service, "observation", None)
+            mapping = observation.mapping if observation else None
+            if mapping is not None:
+                if mapping.phase.status == "completed":
+                    item.mapping_completed += 1
+                else:
+                    item.mapping_limited += 1
+                if (mapping.application_value_read_succeeded is True
+                        and mapping.value_good_count > 0):
+                    item.anonymous_read_verified += 1
+            else:
+                item.mapping_not_attempted += 1
+        else:
+            units = getattr(service, "units", [])
+            mapping_source = getattr(service, "mapping_source", None)
+            if mapping_source in {None, "service_granularity", "discovery_only"}:
+                item.mapping_not_attempted += 1
+            elif any(unit.status == "responding" for unit in units):
+                item.mapping_completed += 1
+            else:
+                item.mapping_limited += 1
+    return IndustrialProtocolSummary(**totals)
 
 
 def materialize_scan_ai_analysis(

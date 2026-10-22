@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from time import perf_counter
 from typing import TYPE_CHECKING, Literal, TypeVar
 
@@ -32,6 +33,7 @@ from agent.normalize.contracts import (
     ModbusDeviceIdentificationPayload,
     ModbusTcpServicePayload,
     ModbusUnitPayload,
+    OpcUaTcpServicePayload,
     OperatingSystemDetection,
     PortPayload,
 )
@@ -39,11 +41,16 @@ from agent.ot.digest import load_digest_key
 from agent.ot.modbus.fingerprints import correlate_fc43_fingerprints
 from agent.ot.modbus.inventory import has_modbus_candidate, inventory_modbus_host
 from agent.ot.modbus.mapper import MappingBudget, map_modbus_service
+from agent.ot.opcua.client import OpcUaClient
+from agent.ot.opcua.inventory import inventory_opcua_service
+from agent.ot.opcua.mapper import map_opcua_service
+from agent.ot.opcua.models import OpcUaInventory
 from agent.ot.policy import (
     MAX_OT_HOST_SECONDS,
     MAX_OT_STAGE_SECONDS,
     OtAutomationPolicy,
     min_not_none,
+    must_stop,
 )
 from agent.scanner.errors import (
     BudgetExceeded,
@@ -456,18 +463,48 @@ def _stage_deadline_hit(
     return _elapsed_stage_seconds(stage_deadline, stage_started)
 
 
-def _ot_host_coverage(
-    cancel_event: threading.Event | None, host_deadline: float | None
-) -> StageCoverage:
-    if cancel_event is not None and cancel_event.is_set():
+def _protocol_coverage(
+    statuses,
+    cancel_event,
+    host_deadline,
+    source,
+    *,
+    port=None,
+    protocol=None,
+    tool=None,
+):
+    coverage = ("ot_inspection", source, port, protocol, tool)
+
+    def record(outcome, reason=None):
         return StageCoverage(
-            "ot_inspection", "partial", "modbus_inspection", "scan_cancelled"
+            coverage[0],
+            outcome,
+            coverage[1],
+            reason,
+            coverage[2],
+            coverage[3],
+            coverage[4],
         )
-    if host_deadline is not None and perf_counter() >= host_deadline:
-        return StageCoverage(
-            "ot_inspection", "partial", "modbus_inspection", "ot_host_deadline"
-        )
-    return StageCoverage("ot_inspection", "completed", "modbus_inspection")
+
+    outcomes = set(statuses)
+    if cancel_event is not None and cancel_event.is_set() and outcomes - {"completed"}:
+        return record("partial", "scan_cancelled")
+    if "failed" in outcomes:
+        outcome = "partial" if len(outcomes) > 1 else "failed"
+        return record(outcome, "service_error")
+    if "timed_out" in outcomes:
+        return record("partial", "timeout")
+    if "skipped" in outcomes:
+        return record("partial", "service_skipped")
+    if (
+        host_deadline is not None
+        and perf_counter() >= host_deadline
+        and outcomes - {"completed"}
+    ):
+        return record("partial", "ot_host_deadline")
+    if outcomes & {"partial", "denied", "unsupported_security"}:
+        return record("partial", "limited_coverage")
+    return record("completed")
 
 
 def run_ot_inspection_stage(
@@ -484,18 +521,22 @@ def run_ot_inspection_stage(
     if settings.scan_mode != "nspi":
         return OtInspectionResult()
 
-    eligible_hosts = [host for host in hosts if has_modbus_candidate(host)]
+    eligible_hosts = [
+        host
+        for host in hosts
+        if has_modbus_candidate(host) or has_opcua_candidate(host)
+    ]
     hosts_total = len(eligible_hosts)
     action = (
-        "Mapping Modbus read-only ranges..."
+        "Mapping industrial services read-only..."
         if settings.nspi_submode == "read_only_mapping"
-        else "Inventorying Modbus devices..."
+        else "Inventorying industrial services..."
     )
     _emit(
         reporter,
         ScanEvent(
             kind="ot_stage_started",
-            message=action if hosts_total else "No Modbus candidates found",
+            message=action if hosts_total else "No industrial candidates found",
             hosts_total=hosts_total,
         ),
     )
@@ -506,6 +547,7 @@ def run_ot_inspection_stage(
     stage_started = perf_counter()
     stage_deadline = min_not_none(deadline, stage_started + MAX_OT_STAGE_SECONDS)
     stopped_at: int | None = None
+    host_deadlines: dict[str, float] = {}
     for index, host in enumerate(eligible_hosts):
         if cancel_event is not None and cancel_event.is_set():
             stopped_at = index
@@ -517,16 +559,36 @@ def run_ot_inspection_stage(
             stage_deadline,
             perf_counter() + MAX_OT_HOST_SECONDS,
         )
-        host.industrial_services = inventory_modbus_host(
-            host,
-            policy=effective_policy,
-            cancel_event=cancel_event,
-            controller=modbus_controller,
-            deadline=host_deadline,
+        host_deadlines[host.ip] = host_deadline or (
+            perf_counter() + MAX_OT_HOST_SECONDS
         )
-        if settings.nspi_submode == "read_only_mapping":
+        host.industrial_services.extend(
+            inventory_modbus_host(
+                host,
+                policy=effective_policy,
+                cancel_event=cancel_event,
+                controller=modbus_controller,
+                deadline=host_deadline,
+                request_budget=min(32, effective_policy.max_mapping_requests_per_host),
+            )
+        )
+        host.opcua_services.extend(
+            _inventory_opcua_host(
+                host,
+                cancel_event=cancel_event,
+                deadline=host_deadline,
+                request_budget=min(32, effective_policy.max_mapping_requests_per_host),
+                pacing_ms=max(100, effective_policy.inter_request_delay_ms),
+            )
+        )
+    # Inventory every candidate before starting either protocol's mapping phase.
+    if settings.nspi_submode == "read_only_mapping":
+        for host in eligible_hosts:
+            host_deadline = host_deadlines.get(host.ip)
+            if host_deadline is None:
+                continue
             budget = MappingBudget(
-                maximum=effective_policy.max_mapping_requests_per_host,
+                maximum=min(32, effective_policy.max_mapping_requests_per_host),
                 used=sum(service.requests_sent for service in host.industrial_services),
             )
             for service in host.industrial_services:
@@ -540,18 +602,92 @@ def run_ot_inspection_stage(
                     budget=budget,
                     digest_key=digest_key,
                 )
+            opcua_budget = MappingBudget(
+                maximum=min(32, effective_policy.max_mapping_requests_per_host),
+                used=sum(service.requests_sent for service in host.opcua_services),
+            )
+            for service_index, service in enumerate(host.opcua_services):
+                remaining = max(0, opcua_budget.maximum - opcua_budget.used)
+                if remaining <= 0 or must_stop(cancel_event, host_deadline):
+                    host.opcua_services[service_index] = replace(
+                        service,
+                        mapping=_opcua_skipped_mapping(
+                            "cancelled"
+                            if cancel_event and cancel_event.is_set()
+                            else "request_budget_exhausted"
+                        ),
+                    )
+                    continue
+                mapped = _map_opcua_service(
+                    service,
+                    host.ip,
+                    cancel_event=cancel_event,
+                    deadline=host_deadline,
+                    request_budget=remaining,
+                    pacing_ms=max(100, effective_policy.inter_request_delay_ms),
+                )
+                host.opcua_services[service_index] = replace(service, mapping=mapped)
+                if mapped.request_count_known:
+                    opcua_budget.used += _mapping_request_count(mapped)
+                else:
+                    opcua_budget.used = opcua_budget.maximum
+    for host in eligible_hosts:
+        if host.ip not in host_deadlines:
+            continue
+        host_deadline = host_deadlines[host.ip]
         correlate_fc43_fingerprints(host)
-        host.stage_coverage.append(_ot_host_coverage(cancel_event, host_deadline))
+        if has_modbus_candidate(host):
+            for item in host.industrial_services:
+                statuses = ["completed" if item.confidence == "confirmed" else "failed"]
+                ranges = [area for unit in item.units for area in unit.address_ranges]
+                if item.mapping_ranges_skipped or any(
+                    area.status == "skipped" for area in ranges
+                ):
+                    statuses.append("skipped")
+                if any(area.status in {"timeout", "error"} for area in ranges):
+                    statuses.append("failed")
+                if any(
+                    area.status in {"illegal_address", "illegal_function"}
+                    for area in ranges
+                ):
+                    statuses.append("partial")
+                host.stage_coverage.append(
+                    _protocol_coverage(
+                        statuses,
+                        cancel_event,
+                        host_deadline,
+                        "modbus_inspection",
+                        port=item.port,
+                        protocol="tcp",
+                        tool="modbus",
+                    )
+                )
+        if has_opcua_candidate(host):
+            for item in host.opcua_services:
+                statuses = [item.inventory_status]
+                if settings.nspi_submode == "read_only_mapping" and item.mapping:
+                    statuses.append(item.mapping.status)
+                host.stage_coverage.append(
+                    _protocol_coverage(
+                        statuses,
+                        cancel_event,
+                        host_deadline,
+                        "opcua_inspection",
+                        port=item.port,
+                        protocol="tcp",
+                        tool="opcua",
+                    )
+                )
         hosts_done += 1
         _emit(
             reporter,
             ScanEvent(
-                kind="modbus_host_inspected",
-                message=(
-                    f"Mapped Modbus on {host.ip}"
-                    if settings.nspi_submode == "read_only_mapping"
-                    else f"Inventoried Modbus on {host.ip}"
+                kind=(
+                    "modbus_host_inspected"
+                    if has_modbus_candidate(host)
+                    else "industrial_host_inspected"
                 ),
+                message=f"Inspected industrial services on {host.ip}",
                 hosts_done=hosts_done,
                 hosts_total=hosts_total,
                 ip=host.ip,
@@ -561,13 +697,24 @@ def run_ot_inspection_stage(
     if stopped_at is not None:
         reason = "scan_cancelled" if cancelled else "stage_budget"
         for host in eligible_hosts[stopped_at:]:
-            host.stage_coverage.append(
-                StageCoverage("ot_inspection", "skipped", "not_run", reason)
-            )
+            if has_modbus_candidate(host):
+                host.stage_coverage.append(
+                    StageCoverage(
+                        "ot_inspection", "skipped", "modbus_inspection", reason
+                    )
+                )
+            if has_opcua_candidate(host):
+                host.stage_coverage.append(
+                    StageCoverage(
+                        "ot_inspection", "skipped", "opcua_inspection", reason
+                    )
+                )
     if not cancelled:
         deadline_seconds = _stage_deadline_hit(stage_deadline, stage_started)
         if deadline_seconds is not None:
-            reason = f"Time limit reached during Modbus inventory ({deadline_seconds}s)"
+            reason = (
+                f"Time limit reached during industrial inspection ({deadline_seconds}s)"
+            )
             _emit(
                 reporter,
                 ScanEvent(
@@ -587,11 +734,14 @@ def run_ot_inspection_stage(
         ScanEvent(
             kind="ot_stage_done",
             message=(
-                "Modbus read-only mapping complete"
+                "Industrial read-only mapping complete"
                 if settings.nspi_submode == "read_only_mapping"
-                else "Modbus inventory complete"
+                else "Industrial inventory complete"
             ),
-            industrial_services=sum(len(host.industrial_services) for host in hosts),
+            industrial_services=sum(
+                len(host.industrial_services) + len(host.opcua_services)
+                for host in hosts
+            ),
             units_total=hosts_total,
             units_skipped=hosts_total - hosts_done,
         ),
@@ -599,16 +749,249 @@ def run_ot_inspection_stage(
     return result
 
 
+def has_opcua_candidate(host: HostInfo) -> bool:
+    return any(
+        port.protocol.lower() == "tcp"
+        and (
+            port.port == 4840
+            or "opcua" in port.service.name.lower()
+            or "opcuatcp" in port.service.name.lower()
+        )
+        for port in host.open_ports
+    )
+
+
+def _inventory_opcua_host(
+    host: HostInfo,
+    *,
+    cancel_event: threading.Event | None,
+    deadline: float | None,
+    request_budget: int,
+    pacing_ms: int = 100,
+) -> list[OpcUaInventory]:
+    results: list[OpcUaInventory] = []
+    candidates = [
+        port
+        for port in sorted(host.open_ports, key=lambda item: item.port)
+        if port.protocol.lower() == "tcp"
+        and (
+            port.port == 4840
+            or "opcua" in port.service.name.lower()
+            or "opcuatcp" in port.service.name.lower()
+        )
+    ]
+    candidates = list({port.port: port for port in candidates}.values())
+    active, limited = candidates[:4], candidates[4:]
+    if request_budget <= 0:
+        from datetime import datetime, timezone
+
+        results.extend(
+            OpcUaInventory(
+                "opcua_tcp",
+                port.port,
+                "suspected",
+                ("tcp_candidate",),
+                "partial",
+                datetime.now(timezone.utc),
+                reason_code="request_budget_exhausted",
+                reason_codes=("request_budget_exhausted",),
+            )
+            for port in candidates
+        )
+        return results
+    client = OpcUaClient()
+    for port in active:
+        if must_stop(cancel_event, deadline):
+            break
+        remaining = max(0.1, min(2.0, (deadline - perf_counter()) if deadline else 2.0))
+        try:
+
+            async def collect():
+                task = asyncio.create_task(
+                    inventory_opcua_service(
+                        client,
+                        host.ip,
+                        port.port,
+                        request_budget=min(32, request_budget),
+                        timeout=remaining,
+                        pacing_ms=pacing_ms,
+                    )
+                )
+                while not task.done():
+                    if must_stop(cancel_event, deadline):
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+                        return None
+                    await asyncio.sleep(0.05)
+                return await task
+
+            result = asyncio.run(collect())
+            if result is None:
+                from datetime import datetime, timezone
+
+                reason = (
+                    "cancelled"
+                    if cancel_event is not None and cancel_event.is_set()
+                    else "host_deadline"
+                )
+                results.append(
+                    OpcUaInventory(
+                        "opcua_tcp",
+                        port.port,
+                        "suspected",
+                        ("tcp_candidate",),
+                        "partial" if reason == "cancelled" else "timed_out",
+                        datetime.now(timezone.utc),
+                        reason_code=reason,
+                        reason_codes=(reason,),
+                        request_count_known=False,
+                    )
+                )
+                pending_reason = (
+                    "cancelled"
+                    if cancel_event is not None and cancel_event.is_set()
+                    else "host_deadline"
+                )
+                results.extend(
+                    _opcua_unstarted(item, pending_reason)
+                    for item in candidates[candidates.index(port) + 1 :]
+                )
+                break
+        except (OSError, RuntimeError, ValueError):
+            from datetime import datetime, timezone
+
+            results.append(
+                OpcUaInventory(
+                    "opcua_tcp",
+                    port.port,
+                    "suspected",
+                    ("tcp_candidate",),
+                    "failed",
+                    datetime.now(timezone.utc),
+                    reason_code="service_error",
+                    reason_codes=("service_error",),
+                )
+            )
+            continue
+        results.append(result)
+        request_budget = (
+            max(0, request_budget - result.requests_sent)
+            if result.request_count_known
+            else 0
+        )
+        if request_budget <= 0:
+            results.extend(
+                _opcua_unstarted(item, "request_budget_exhausted")
+                for item in candidates[candidates.index(port) + 1 :]
+            )
+            break
+    results.extend(_opcua_unstarted(item, "service_limit") for item in limited)
+    unique: dict[int, OpcUaInventory] = {}
+    for item in results:
+        unique.setdefault(item.port, item)
+    return list(unique.values())
+
+
+def _opcua_unstarted(port, reason: str) -> OpcUaInventory:
+    from datetime import datetime, timezone
+
+    outcome = "timed_out" if reason == "host_deadline" else "partial"
+    return OpcUaInventory(
+        "opcua_tcp",
+        port.port,
+        "suspected",
+        ("tcp_candidate",),
+        outcome,
+        datetime.now(timezone.utc),
+        reason_code=reason,
+        reason_codes=(reason,),
+    )
+
+
+def _map_opcua_service(
+    service: OpcUaInventory,
+    host: str,
+    *,
+    cancel_event: threading.Event | None,
+    deadline: float | None,
+    request_budget: int,
+    pacing_ms: int = 100,
+):
+    if service.confidence != "confirmed" or not service.client_endpoints:
+        from agent.ot.opcua.models import OpcUaMappingResult
+
+        return OpcUaMappingResult("skipped", ("invalid_response",))
+    if must_stop(cancel_event, deadline):
+        return _opcua_skipped_mapping(
+            "cancelled" if cancel_event and cancel_event.is_set() else "host_deadline"
+        )
+    remaining = max(0.1, min(90.0, deadline - perf_counter() if deadline else 90.0))
+
+    async def run():
+        task = asyncio.create_task(
+            map_opcua_service(
+                OpcUaClient(),
+                host,
+                service.port,
+                service.client_endpoints,
+                request_budget=min(32, request_budget),
+                timeout=min(2.0, remaining),
+                deadline=remaining,
+                pacing_ms=pacing_ms,
+            )
+        )
+        while not task.done():
+            if must_stop(cancel_event, deadline):
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                return _opcua_skipped_mapping(
+                    (
+                        "cancelled"
+                        if cancel_event and cancel_event.is_set()
+                        else "host_deadline"
+                    ),
+                    request_count_known=False,
+                )
+            await asyncio.sleep(0.05)
+        return await task
+
+    try:
+        return asyncio.run(run())
+    except Exception:
+        from agent.ot.opcua.models import OpcUaMappingResult
+
+        return OpcUaMappingResult("failed", ("service_error",))
+
+
+def _opcua_skipped_mapping(reason: str, *, request_count_known: bool = True):
+    from agent.ot.opcua.models import OpcUaMappingResult
+
+    return OpcUaMappingResult(
+        "skipped", (reason,), request_count_known=request_count_known
+    )
+
+
+def _mapping_request_count(mapping) -> int:
+    return min(32, max(0, mapping.requests_sent))
+
+
 def build_host_payload(
     host: HostInfo,
     *,
+    agent_ip: str | None = None,
     machine_type: MachineType | None = None,
     device_profile: DeviceProfilePayload | None = None,
 ) -> HostPayload:
     return HostPayload(
         ip=host.ip,
         mac=host.identity.mac,
-        hostname=host.hostname or host.ip,
+        hostname="DMITRI" if agent_ip == host.ip else (host.hostname or host.ip),
         vendor=host.identity.vendor,
         operating_system=(
             OperatingSystemDetection(
@@ -692,9 +1075,96 @@ def build_host_payload(
                 ],
             )
             for service in host.industrial_services
-        ],
+        ]
+        + [_build_opcua_payload(service) for service in host.opcua_services],
         machine_type=machine_type,
         device_profile=device_profile,
+    )
+
+
+def _build_opcua_payload(service: OpcUaInventory) -> OpcUaTcpServicePayload:
+    inventory_phase = {
+        "status": service.inventory_status,
+        "reason_codes": list(
+            service.reason_codes
+            or ((service.reason_code,) if service.reason_code else ())
+        ),
+        "truncated": service.truncated,
+        "observed_at": service.observed_at,
+    }
+    mapping = None
+    if service.mapping is not None:
+        result = service.mapping
+        mapping = {
+            "phase": {
+                "status": result.status,
+                "reason_codes": list(result.reason_codes),
+                "truncated": result.truncated,
+                "observed_at": result.observed_at,
+            },
+            "nodes": [
+                (
+                    node.__dict__
+                    if hasattr(node, "__dict__")
+                    else {name: getattr(node, name) for name in node.__slots__}
+                )
+                for node in result.nodes
+            ],
+            "references": [
+                (
+                    item.__dict__
+                    if hasattr(item, "__dict__")
+                    else {name: getattr(item, name) for name in item.__slots__}
+                )
+                for item in result.references
+            ],
+            "references_observed": result.references_observed,
+            "value_reads_attempted": result.value_reads_attempted,
+            "selected_endpoint_index": result.selected_endpoint_index,
+            "anonymous_session_activated": result.anonymous_session_activated,
+            "browse_succeeded": result.browse_succeeded,
+            "application_value_read_succeeded": result.application_value_read_succeeded,
+            "value_good_count": result.value_good_count,
+            "security_mode": {
+                "value": next(iter(result.security_mode.values()), "None"),
+                "source": "get_endpoints",
+                "status": "Good",
+            },
+            "security_policy": {
+                "value": next(iter(result.security_policy.values()), "None"),
+                "source": "get_endpoints",
+                "status": "Good",
+            },
+        }
+    return OpcUaTcpServicePayload.model_validate(
+        {
+            "protocol": "opcua_tcp",
+            "port": service.port,
+            "confidence": service.confidence,
+            "evidence_sources": list(service.evidence_sources),
+            "write_requests_sent": service.write_requests_sent
+            + (service.mapping.write_requests_sent if service.mapping else 0),
+            "observation": {
+                "schema_version": 1,
+                "inventory_phase": inventory_phase,
+                "identity": service.identity or None,
+                "certificate_sha256": service.certificate_sha256,
+                "endpoints": [
+                    {
+                        "endpoint_url": item.endpoint_url,
+                        "security_policy_uri": item.security_policy_uri,
+                        "security_mode": item.security_mode,
+                        "transport_profile_uri": item.transport_profile_uri,
+                        "security_level": item.security_level,
+                        "user_token_count": item.user_token_count,
+                        "user_token_types": list(item.user_token_types),
+                        "target_matches": item.target_matches,
+                    }
+                    for item in service.endpoints
+                ],
+                "mapping": mapping,
+            },
+        }
     )
 
 
@@ -774,7 +1244,7 @@ def build_metadata(
         digest_key = load_digest_key()
         metadata.update(
             {
-                "nspi_policy_version": 1,
+                "nspi_policy_version": 2,
                 "nspi_submode": settings.nspi_submode,
                 "modbus_candidates": len(modbus_services),
                 "modbus_confirmed": sum(
@@ -811,10 +1281,67 @@ def build_metadata(
             }
         )
         ot_result = ot_inspection or OtInspectionResult()
+        opcua_services = [
+            service for host in hosts or [] for service in host.opcua_services
+        ]
+        metadata.update(
+            {
+                "opcua_candidates": len(opcua_services),
+                "opcua_confirmed": sum(
+                    service.confidence == "confirmed" for service in opcua_services
+                ),
+                "opcua_requests_sent": sum(
+                    service.requests_sent for service in opcua_services
+                )
+                + sum(
+                    service.mapping.requests_sent
+                    for service in opcua_services
+                    if service.mapping
+                ),
+                "opcua_request_counts_incomplete": any(
+                    not service.request_count_known
+                    or (
+                        service.mapping is not None
+                        and not service.mapping.request_count_known
+                    )
+                    for service in opcua_services
+                ),
+                "opcua_anonymous_value_reads": sum(
+                    service.mapping.value_reads_attempted
+                    for service in opcua_services
+                    if service.mapping
+                ),
+                "opcua_limited_services": sum(
+                    service.inventory_status != "completed"
+                    or (
+                        service.mapping is not None
+                        and service.mapping.status not in {"completed", "skipped"}
+                    )
+                    for service in opcua_services
+                ),
+                "industrial_requests_sent": sum(
+                    service.requests_sent for service in modbus_services
+                )
+                + sum(service.requests_sent for service in opcua_services)
+                + sum(
+                    service.mapping.requests_sent
+                    for service in opcua_services
+                    if service.mapping
+                ),
+                "industrial_request_counts_incomplete": any(
+                    not service.request_count_known
+                    or (
+                        service.mapping is not None
+                        and not service.mapping.request_count_known
+                    )
+                    for service in opcua_services
+                ),
+            }
+        )
         if ot_result.stage_deadline_reached:
-            metadata["modbus_stage_deadline_reached"] = True
+            metadata["industrial_stage_deadline_reached"] = True
             if ot_result.stage_deadline_seconds is not None:
-                metadata["modbus_stage_deadline_seconds"] = (
+                metadata["industrial_stage_deadline_seconds"] = (
                     ot_result.stage_deadline_seconds
                 )
     if targeted_summary is not None:

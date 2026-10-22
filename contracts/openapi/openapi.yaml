@@ -3790,6 +3790,127 @@ components:
           items:
             $ref: '#/components/schemas/ModbusUnitPayload'
           default: []
+    OpcUaEndpointPayload:
+      type: object
+      additionalProperties: false
+      required: [endpoint_url, security_policy_uri, security_mode, transport_profile_uri, security_level, user_token_count, user_token_types, target_matches]
+      properties:
+        endpoint_url: {type: string, minLength: 1, maxLength: 256}
+        security_policy_uri: {type: string, minLength: 1, maxLength: 256}
+        security_mode: {type: string, enum: [None, Sign, SignAndEncrypt]}
+        transport_profile_uri: {type: string, minLength: 1, maxLength: 256}
+        security_level: {type: integer, minimum: 0, maximum: 255}
+        user_token_count: {type: integer, minimum: 0, maximum: 8}
+        user_token_types:
+          type: array
+          maxItems: 8
+          items: {type: string, enum: [Anonymous, UserName, Certificate, IssuedToken]}
+        target_matches: {type: boolean}
+    OpcUaIdentityPayload:
+      type: object
+      additionalProperties: false
+      properties:
+        application_uri: {type: [string, 'null'], maxLength: 128}
+        product_uri: {type: [string, 'null'], maxLength: 128}
+        application_name: {type: [string, 'null'], maxLength: 128}
+        application_type: {type: [string, 'null'], enum: [Server, Client, ClientAndServer, DiscoveryServer, null]}
+    OpcUaPhasePayload:
+      type: object
+      additionalProperties: false
+      required: [status, reason_codes, truncated, observed_at]
+      properties:
+        status: {type: string, enum: [completed, partial, failed, timed_out, skipped, denied, unsupported_security]}
+        reason_codes:
+          type: array
+          maxItems: 16
+          items: {type: string, enum: [timeout, endpoint_discovery_failed, endpoint_target_mismatch, endpoint_limit, message_size_limit, request_budget_exhausted, service_not_allowed, service_error, invalid_response, helper_unavailable, cancelled, host_deadline, stage_deadline, global_deadline, decode_limit, byte_limit, opaque_node_id_omitted, observation_size_limit, decode_error, authentication_required, anonymous_denied, security_configuration_required, external_reference, page_limit, node_limit, depth_limit, no_eligible_variables, service_limit]}
+        truncated: {type: boolean}
+        observed_at: {type: string, format: date-time}
+    OpcUaObservationPayload:
+      type: object
+      additionalProperties: false
+      required: [schema_version, inventory_phase, endpoints]
+      properties:
+        schema_version: {type: integer, const: 1}
+        inventory_phase: {$ref: '#/components/schemas/OpcUaPhasePayload'}
+        identity:
+          anyOf:
+            - {$ref: '#/components/schemas/OpcUaIdentityPayload'}
+            - {type: 'null'}
+        certificate_sha256: {type: [string, 'null'], pattern: '^[0-9a-f]{64}$'}
+        endpoints:
+          type: array
+          maxItems: 16
+          items: {$ref: '#/components/schemas/OpcUaEndpointPayload'}
+        mapping:
+          anyOf:
+            - {$ref: '#/components/schemas/OpcUaMappingPayload'}
+            - {type: 'null'}
+    OpcUaMappedReferencePayload:
+      type: object
+      additionalProperties: false
+      required: [source_node_id, target_node_id, reference_type_id, is_forward]
+      properties:
+        source_node_id: {type: string, minLength: 1, maxLength: 256}
+        target_node_id: {type: string, minLength: 1, maxLength: 256}
+        reference_type_id: {type: string, minLength: 1, maxLength: 256}
+        is_forward: {type: boolean}
+    OpcUaMappedNodePayload:
+      type: object
+      additionalProperties: false
+      required: [node_id, depth, node_class]
+      properties:
+        node_id: {type: string, minLength: 1, maxLength: 256}
+        parent_node_id: {type: [string, 'null'], maxLength: 256}
+        depth: {type: integer, minimum: 0, maximum: 4}
+        node_class: {type: string, enum: [Object, Variable]}
+        browse_name: {type: [string, 'null'], maxLength: 128}
+        display_name: {type: [string, 'null'], maxLength: 128}
+        data_type: {type: [string, 'null'], maxLength: 256}
+        value_rank: {type: [integer, 'null']}
+        access_level: {type: [integer, 'null'], minimum: 0, maximum: 255}
+        user_access_level: {type: [integer, 'null'], minimum: 0, maximum: 255}
+        value_read_status: {type: [string, 'null'], enum: [Good, Denied, Error, Skipped, null]}
+    OpcUaMappingPayload:
+      type: object
+      additionalProperties: false
+      required: [phase, nodes, references_observed, value_reads_attempted, selected_endpoint_index, anonymous_session_activated, browse_succeeded, application_value_read_succeeded, value_good_count, security_mode, security_policy]
+      properties:
+        phase: {$ref: '#/components/schemas/OpcUaPhasePayload'}
+        nodes: {type: array, maxItems: 128, items: {$ref: '#/components/schemas/OpcUaMappedNodePayload'}}
+        references: {type: array, maxItems: 512, items: {$ref: '#/components/schemas/OpcUaMappedReferencePayload'}}
+        references_observed: {type: integer, minimum: 0, maximum: 512}
+        value_reads_attempted: {type: integer, minimum: 0, maximum: 8}
+        selected_endpoint_index: {type: [integer, 'null'], minimum: 0, maximum: 15}
+        anonymous_session_activated: {type: [boolean, 'null']}
+        browse_succeeded: {type: [boolean, 'null']}
+        application_value_read_succeeded: {type: [boolean, 'null']}
+        value_good_count: {type: integer, minimum: 0, maximum: 8}
+        security_mode: {$ref: '#/components/schemas/OpcUaSecurityFactPayload'}
+        security_policy: {$ref: '#/components/schemas/OpcUaSecurityFactPayload'}
+    OpcUaSecurityFactPayload:
+      type: object
+      additionalProperties: false
+      required: [value, source, status]
+      properties:
+        value: {type: string, minLength: 1, maxLength: 256}
+        source: {type: string, enum: [get_endpoints]}
+        status: {type: string, enum: [Good, Bad]}
+    OpcUaTcpServicePayload:
+      type: object
+      additionalProperties: false
+      required: [protocol, port, confidence, observation]
+      properties:
+        protocol: {type: string, const: opcua_tcp}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        confidence: {type: string, enum: [suspected, confirmed]}
+        evidence_sources:
+          type: array
+          maxItems: 8
+          items: {type: string, minLength: 1, maxLength: 64}
+          default: []
+        write_requests_sent: {type: integer, minimum: 0, default: 0}
+        observation: {$ref: '#/components/schemas/OpcUaObservationPayload'}
     HostPayload:
       type: object
       additionalProperties: false
@@ -3826,7 +3947,9 @@ components:
         industrial_services:
           type: array
           items:
-            $ref: '#/components/schemas/ModbusTcpServicePayload'
+            oneOf:
+              - {$ref: '#/components/schemas/ModbusTcpServicePayload'}
+              - {$ref: '#/components/schemas/OpcUaTcpServicePayload'}
           default: []
         machine_type:
           anyOf:
@@ -3888,7 +4011,9 @@ components:
             Industrial observations retained 180 days from scan ingestion.
             No pruning job enforces that period yet.
           items:
-            $ref: '#/components/schemas/IndustrialServiceView'
+            oneOf:
+              - {$ref: '#/components/schemas/IndustrialServiceView'}
+              - {$ref: '#/components/schemas/OpcUaServiceView'}
           default: []
         unreadable_fields:
           type: array
@@ -3934,6 +4059,22 @@ components:
           items:
             $ref: '#/components/schemas/ModbusUnitView'
           default: []
+    OpcUaServiceView:
+      type: object
+      additionalProperties: false
+      required: [protocol, port, confidence, observation]
+      properties:
+        protocol: {type: string, const: opcua_tcp}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        confidence: {type: string, enum: [suspected, confirmed]}
+        evidence_sources:
+          type: array
+          items: {type: string, minLength: 1, maxLength: 64}
+          default: []
+        observation:
+          anyOf:
+            - {$ref: '#/components/schemas/OpcUaObservationPayload'}
+            - {type: 'null'}
     ModbusUnitView:
       type: object
       additionalProperties: false
@@ -4192,6 +4333,7 @@ components:
           - nmap_ports
           - port_discovery
           - modbus_inspection
+          - opcua_inspection
           - targeted_tool
           - targeted_tool_partial_report
           - not_run
@@ -4725,7 +4867,9 @@ components:
         industrial_services:
           type: array
           items:
-            $ref: '#/components/schemas/IndustrialServiceView'
+            oneOf:
+              - {$ref: '#/components/schemas/IndustrialServiceView'}
+              - {$ref: '#/components/schemas/OpcUaServiceView'}
           default: []
         unreadable_fields:
           type: array
@@ -6505,6 +6649,25 @@ components:
     ReportKind:
       type: string
       enum: [explained, technical]
+    ReportIndustrialProtocol:
+      type: object
+      additionalProperties: false
+      required:
+      - service_count
+      - confirmed_services
+      - suspected_services
+      - mapping_completed
+      - mapping_limited
+      - mapping_not_attempted
+      - anonymous_read_verified
+      properties:
+        service_count: {type: integer}
+        confirmed_services: {type: integer}
+        suspected_services: {type: integer}
+        mapping_completed: {type: integer}
+        mapping_limited: {type: integer}
+        mapping_not_attempted: {type: integer}
+        anonymous_read_verified: {type: integer}
     ExplainedReportSections:
       properties:
         version:
@@ -6545,6 +6708,11 @@ components:
             type: integer
           type: object
           title: Service Counts
+        industrial_protocols:
+          additionalProperties:
+            $ref: '#/components/schemas/ReportIndustrialProtocol'
+          type: object
+          title: Industrial Protocols
         affected_hosts:
           type: integer
           title: Affected Hosts
@@ -6622,6 +6790,7 @@ components:
       - finding_observations
       - finding_observations_truncated
       - service_counts
+      - industrial_protocols
       - affected_hosts
       - hosts_without_findings
       - unassigned_findings
@@ -7177,6 +7346,11 @@ components:
           title: Scan Mode
         scan:
           $ref: '#/components/schemas/ScanDetailResponse'
+        industrial_protocols:
+          additionalProperties:
+            $ref: '#/components/schemas/ReportIndustrialProtocol'
+          type: object
+          title: Industrial Protocols
         risk_summary:
           $ref: '#/components/schemas/ScanRiskSummaryResponse'
         ai_analysis:
@@ -7190,6 +7364,7 @@ components:
       - scope
       - scan_mode
       - scan
+      - industrial_protocols
       - risk_summary
       - ai_analysis
       title: TechnicalReportSections

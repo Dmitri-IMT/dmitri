@@ -4,7 +4,6 @@ import logging
 import threading
 
 import pytest
-
 from agent.ot.digest import DIGEST_PREFIX
 from agent.ot.modbus.client import ModbusReadResult
 from agent.ot.modbus.mapper import map_modbus_service, resolve_mapping_plan

@@ -50,6 +50,7 @@ class ModbusUnit:
     device_identification: ModbusDeviceIdentification | None = None
     identification_sources: list[str] = field(default_factory=list)
     address_ranges: list[ModbusAddressRange] = field(default_factory=list)
+    request_sent: bool = False
 
 
 @dataclass(slots=True)

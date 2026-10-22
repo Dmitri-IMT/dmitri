@@ -31,6 +31,7 @@ from api.models.persistence import (
     ServiceRecord,
     utc_now,
 )
+from api.schemas.industrial import OpcUaObservationPayload
 from api.schemas.operating_system import OperatingSystemDetection
 from api.schemas.read import (
     ExposureRead,
@@ -49,6 +50,7 @@ from api.schemas.read import (
     ModbusAddressRangeView,
     ModbusDeviceIdentificationView,
     ModbusUnitView,
+    OpcUaServiceView,
     Port,
     ScanDetailResponse,
     ScanHostView,
@@ -744,7 +746,7 @@ def _validate_or_degrade(
 
 def _industrial_service_views(
     session: Session, scan_host_id: int, unreadable: list[str]
-) -> list[IndustrialServiceView]:
+) -> list[IndustrialServiceView | OpcUaServiceView]:
     services = industrial_services_for_scan_host(session, scan_host_id)
     if not services:
         return []
@@ -757,20 +759,40 @@ def _industrial_service_views(
             .order_by(ModbusUnitRecord.unit_id)
         ).all():
             units_by_service.setdefault(unit.industrial_service_id, []).append(unit)
-    return [
-        IndustrialServiceView(
-            protocol=service.protocol,
-            port=service.port,
-            confidence=service.confidence,
-            mapping_source=service.mapping_source,
-            evidence_sources=list(service.evidence_sources_json),
-            units=[
-                _to_modbus_unit_view(unit, unreadable)
-                for unit in units_by_service.get(service.id or -1, [])
-            ],
+    views: list[IndustrialServiceView | OpcUaServiceView] = []
+    for service in services:
+        if service.protocol == "opcua_tcp":
+            observation = _validate_or_degrade(
+                OpcUaObservationPayload,
+                service.opcua_observation_json,
+                field="opcua_observation",
+                unreadable=unreadable,
+                context=f"industrial_service_id={service.id}",
+            )
+            views.append(
+                OpcUaServiceView(
+                    protocol="opcua_tcp",
+                    port=service.port,
+                    confidence=service.confidence,
+                    evidence_sources=list(service.evidence_sources_json),
+                    observation=observation,
+                )
+            )
+            continue
+        views.append(
+            IndustrialServiceView(
+                protocol="modbus_tcp",
+                port=service.port,
+                confidence=service.confidence,
+                mapping_source=service.mapping_source,
+                evidence_sources=list(service.evidence_sources_json),
+                units=[
+                    _to_modbus_unit_view(unit, unreadable)
+                    for unit in units_by_service.get(service.id or -1, [])
+                ],
+            )
         )
-        for service in services
-    ]
+    return views
 
 
 def _to_modbus_unit_view(

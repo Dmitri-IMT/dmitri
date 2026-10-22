@@ -360,6 +360,24 @@ def append_education(
             [copy["ports"]], ("#287B8E",), chart_width, font_name,
         ))
     lesson("service_counts_note")
+    protocols = education["industrial_protocols"]
+    if any(item["service_count"] for item in protocols.values()):
+        heading("industrial_protocols")
+        for protocol, summary in protocols.items():
+            if summary["service_count"]:
+                lesson(
+                    "industrial_protocol_summary",
+                    protocol="Modbus TCP" if protocol == "modbus_tcp" else "OPC UA",
+                    count=summary["service_count"],
+                    confirmed=summary["confirmed_services"],
+                    suspected=summary["suspected_services"],
+                    completed=summary["mapping_completed"],
+                    limited=summary["mapping_limited"],
+                    not_attempted=summary["mapping_not_attempted"],
+                    anonymous_reads=summary["anonymous_read_verified"],
+                )
+        if protocols["opcua_tcp"]["service_count"]:
+            lesson("industrial_scope_note")
 
     heading("device_title", new_page=True)
     lesson("identity_note")

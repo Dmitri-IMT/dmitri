@@ -279,10 +279,18 @@ class ScanViewScreen(DmitriScreen):
         ]
         if "elapsed_seconds" in metadata:
             lines.append(f"Duration: {format_duration(metadata['elapsed_seconds'])}")
-        if metadata.get("modbus_stage_deadline_reached"):
-            seconds = metadata.get("modbus_stage_deadline_seconds", 0)
+        deadline_key = (
+            "industrial_stage_deadline_reached"
+            if "industrial_stage_deadline_reached" in metadata
+            else "modbus_stage_deadline_reached"
+        )
+        if metadata.get(deadline_key):
+            seconds = metadata.get(
+                "industrial_stage_deadline_seconds",
+                metadata.get("modbus_stage_deadline_seconds", 0),
+            )
             lines.append(
-                f"Limits: Time limit reached during Modbus inventory ({seconds}s)"
+                f"Limits: Time limit reached during industrial inspection ({seconds}s)"
             )
         return "\n".join(lines)
 

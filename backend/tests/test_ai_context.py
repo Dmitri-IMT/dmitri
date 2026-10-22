@@ -1,7 +1,11 @@
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
 import pytest
 from api.models.persistence import (
     AIScanAnalysisRecord,
     EpssRecord,
+    IndustrialServiceRecord,
     KevRecord,
     RiskSnapshotRecord,
 )
@@ -16,6 +20,7 @@ from api.services.ai.context import (
     build_finding_contexts,
     build_scan_ai_context,
     materialize_scan_ai_analysis,
+    summarize_industrial_protocols,
 )
 from api.services.read import get_scan_detail
 from read_factories import seed_read_graph
@@ -73,7 +78,7 @@ def test_context_uses_ranked_bounded_enriched_findings(
     )
 
     assert context is not None
-    assert context.context_version == "5"
+    assert context.context_version == "6"
     assert context.host_count == 2
     assert context.total_findings == 2
     assert context.scored_findings == 2
@@ -117,7 +122,7 @@ def test_context_maps_partial_scan_termination(
     context = build_scan_ai_context(administrative_session, seeded["scan"])
 
     assert context is not None
-    assert context.context_version == "5"
+    assert context.context_version == "6"
     assert context.evidence_completeness == "partial"
     assert context.stopped_by == stopped_by
 
@@ -187,6 +192,100 @@ def test_context_sends_only_public_facts_and_placeholders(
         assert value not in payload
     assert '"finding_ref":"finding_1"' in payload
     assert '"machine_ref":"machine_1"' in payload
+
+
+def test_context_includes_only_aggregate_industrial_protocol_facts(
+    administrative_session,
+):
+    seeded = seed_read_graph(administrative_session)
+    phase = {"status": "completed", "reason_codes": [], "truncated": False,
+             "observed_at": datetime.now(timezone.utc).isoformat()}
+    observation = {
+        "schema_version": 1, "inventory_phase": phase,
+        "identity": {
+            "application_uri": "UA_URI_SENTINEL",
+            "product_uri": "UA_PRODUCT_SENTINEL",
+            "application_name": "UA_APP_SENTINEL",
+            "application_type": "Server",
+        },
+        "certificate_sha256": "b" * 64,
+        "endpoints": [{
+            "endpoint_url": "opc.tcp://user:UA_SECRET_SENTINEL@192.168.1.10:4840/path",
+            "security_policy_uri": "UA_POLICY_SENTINEL",
+            "security_mode": "None",
+            "transport_profile_uri": "UA_PROFILE_SENTINEL",
+            "security_level": 0,
+            "user_token_count": 1,
+            "user_token_types": ["Anonymous"],
+            "target_matches": True,
+        }],
+        "mapping": {"phase": phase, "nodes": [{"node_id": "UA_NODE_SENTINEL",
+                    "parent_node_id": None, "depth": 0, "node_class": "Variable",
+                    "browse_name": "UA_BROWSE_SENTINEL",
+                    "display_name": "UA_DISPLAY_SENTINEL",
+                    "data_type": "UA_TYPE_SENTINEL", "value_rank": -1,
+                    "access_level": 3,
+                    "user_access_level": 3, "value_read_status": "Good"}],
+                    "references": [], "references_observed": 0,
+                    "value_reads_attempted": 1,
+                    "selected_endpoint_index": 0, "anonymous_session_activated": True,
+                    "browse_succeeded": True, "application_value_read_succeeded": True,
+                    "value_good_count": 1,
+                    "security_mode": {
+                        "value": "None", "source": "get_endpoints", "status": "Good",
+                    },
+                    "security_policy": {
+                        "value": "None", "source": "get_endpoints", "status": "Good",
+                    }},
+    }
+    administrative_session.add_all([
+        IndustrialServiceRecord(scan_host_id=seeded["scan_host"].id,
+                                protocol="modbus_tcp", port=502, confidence="confirmed",
+                                evidence_sources_json=["response"]),
+        IndustrialServiceRecord(scan_host_id=seeded["scan_host"].id,
+                                protocol="opcua_tcp", port=4840, confidence="confirmed",
+                                evidence_sources_json=["valid_response"],
+                                opcua_observation_json=observation),
+        IndustrialServiceRecord(scan_host_id=seeded["scan_host"].id,
+                                protocol="opcua_tcp", port=4841, confidence="confirmed",
+                                evidence_sources_json=["valid_response"],
+                                opcua_observation_json={
+                                    **observation, "mapping": None,
+                                }),
+    ])
+    administrative_session.commit()
+
+    context = build_scan_ai_context(administrative_session, seeded["scan"])
+    assert context is not None
+    assert context.context_version == "6"
+    assert context.industrial_protocols.modbus_tcp.service_count == 1
+    ua = context.industrial_protocols.opcua_tcp
+    assert ua.service_count == ua.confirmed_services == 2
+    assert ua.mapping_not_attempted == 1
+    assert ua.anonymous_read_verified == 1
+    serialized = context.model_dump_json()
+    for sentinel in ("UA_NODE_SENTINEL", "UA_SECRET_SENTINEL", "UA_URI_SENTINEL",
+                     "UA_PRODUCT_SENTINEL", "UA_APP_SENTINEL", "UA_POLICY_SENTINEL",
+                     "UA_PROFILE_SENTINEL", "UA_BROWSE_SENTINEL", "UA_DISPLAY_SENTINEL",
+                     "UA_TYPE_SENTINEL", "b" * 64):
+        assert sentinel not in serialized
+
+
+@pytest.mark.parametrize(
+    "mapping_source", [None, "service_granularity", "discovery_only"]
+)
+def test_modbus_discovery_units_are_not_counted_as_mapping_in_ai_context(
+    mapping_source,
+):
+    service = SimpleNamespace(
+        protocol="modbus_tcp", confidence="confirmed",
+        mapping_source=mapping_source,
+        units=[SimpleNamespace(status="responding") for _ in range(3)],
+    )
+    modbus = summarize_industrial_protocols([service]).modbus_tcp
+    assert modbus.service_count == 1
+    assert modbus.mapping_not_attempted == 1
+    assert modbus.mapping_completed == modbus.mapping_limited == 0
 
 
 @pytest.mark.parametrize(
@@ -343,7 +442,7 @@ def test_split_context_keeps_full_evidence_summary(administrative_session):
         "finding_1", "finding_2"
     ]
     assert all(chunk.evidence_summary == context.evidence_summary for chunk in chunks)
-    assert all(chunk.context_version == "5" for chunk in chunks)
+    assert all(chunk.context_version == "6" for chunk in chunks)
 
 
 @pytest.mark.parametrize("max_findings", [0, 16])

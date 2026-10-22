@@ -1,0 +1,8 @@
+asyncua 2.1.0
+Copyright (c) FreeOpcUa contributors.
+Licensed under the GNU Lesser General Public License, version 3 or later.
+The upstream package and its license files are distributed in the locked asyncua wheel.
+
+Dmitri applies worker-only runtime guards to asyncua's binary decoder and transport:
+bounded lengths, recursive decode depth, Variant dimensions, request authorization,
+and raw socket framing and send accounting. The upstream package source is not modified.

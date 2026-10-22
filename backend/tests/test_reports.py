@@ -4,7 +4,13 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
-from api.models.persistence import RiskSnapshotRecord
+from api.models.persistence import (
+    IndustrialServiceRecord,
+    PortRecord,
+    RiskSnapshotRecord,
+    ScanHostRecord,
+    ServiceRecord,
+)
 from api.schemas.ai import (
     AIFindingExplanation,
     ScanAIAnalysis,
@@ -16,6 +22,154 @@ from api.services.report_pdf import _format_timestamp, _scan_mode_label
 from read_factories import make_finding, seed_read_graph
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.platypus import KeepTogether, Paragraph, Table
+from sqlmodel import select
+
+
+def _add_dual_protocol_observations(session, seeded):
+    host = session.exec(select(ScanHostRecord).where(
+        ScanHostRecord.scan_id == seeded["scan"].scan_id,
+        ScanHostRecord.ip == "192.168.1.10",
+    )).one()
+    session.add(IndustrialServiceRecord(
+        scan_host_id=host.id, protocol="modbus_tcp", port=502,
+        confidence="confirmed", evidence_sources_json=["modbus_response"],
+    ))
+    phase = {"status": "completed", "reason_codes": [], "truncated": False,
+             "observed_at": datetime.now(timezone.utc).isoformat()}
+    observation = {
+        "schema_version": 1, "inventory_phase": phase,
+        "identity": {"application_uri": "urn:UA_NODE_SENTINEL",
+                     "product_uri": "UA_PRODUCT_SENTINEL",
+                     "application_name": "UA_METADATA_SENTINEL",
+                     "application_type": "Server"},
+        "certificate_sha256": "a" * 64,
+        "endpoints": [{
+            "endpoint_url": "opc.tcp://u:SECRET_SENTINEL@192.168.1.10:4840/SECRET_PATH",
+            "security_policy_uri": "POLICY_SENTINEL",
+            "security_mode": "None",
+            "transport_profile_uri": "PROFILE_SENTINEL",
+            "security_level": 0,
+            "user_token_count": 1,
+            "user_token_types": ["Anonymous"],
+            "target_matches": True,
+        }],
+        "mapping": {"phase": phase, "nodes": [{"node_id": "NODE_SENTINEL",
+                    "parent_node_id": None, "depth": 0, "node_class": "Variable",
+                    "browse_name": "NODE_METADATA_SENTINEL",
+                    "display_name": "DISPLAY_SENTINEL",
+                    "data_type": "TYPE_SENTINEL", "value_rank": -1, "access_level": 3,
+                    "user_access_level": 3, "value_read_status": "Good"}],
+                    "references": [], "references_observed": 0,
+                    "value_reads_attempted": 1,
+                    "selected_endpoint_index": 0, "anonymous_session_activated": True,
+                    "browse_succeeded": True, "application_value_read_succeeded": True,
+                    "value_good_count": 1,
+                    "security_mode": {
+                        "value": "None", "source": "get_endpoints", "status": "Good",
+                    },
+                    "security_policy": {
+                        "value": "None", "source": "get_endpoints", "status": "Good",
+                    }},
+    }
+    session.add(IndustrialServiceRecord(
+        scan_host_id=host.id, protocol="opcua_tcp", port=4840,
+        confidence="confirmed", evidence_sources_json=["valid_opcua_response"],
+        opcua_observation_json=observation,
+    ))
+    announced_only = {**observation, "mapping": None}
+    session.add(IndustrialServiceRecord(
+        scan_host_id=host.id, protocol="opcua_tcp", port=4841,
+        confidence="confirmed", evidence_sources_json=["valid_opcua_response"],
+        opcua_observation_json=announced_only,
+    ))
+    ua_port = PortRecord(scan_host_id=host.id, port=4840, protocol="tcp", state="open")
+    session.add(ua_port)
+    session.flush()
+    session.add(ServiceRecord(port_id=ua_port.id, name="opcua",
+                              version="BANNER_SECRET_SENTINEL"))
+    session.commit()
+
+
+def test_mixed_protocol_reports_aggregate_and_redact_opcua_payload(
+    client, administrative_session, bearer_headers, tmp_path,
+):
+    seeded = seed_read_graph(administrative_session)
+    _add_dual_protocol_observations(administrative_session, seeded)
+
+    technical = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}/reports/technical",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+    assert technical.status_code == 200
+    exported = technical.json()["sections"]
+    assert exported["industrial_protocols"]["modbus_tcp"]["service_count"] == 1
+    modbus = exported["industrial_protocols"]["modbus_tcp"]
+    assert (modbus["mapping_completed"] + modbus["mapping_limited"]
+            + modbus["mapping_not_attempted"] == modbus["service_count"])
+    ua = exported["industrial_protocols"]["opcua_tcp"]
+    assert ua["service_count"] == ua["confirmed_services"] == 2
+    assert ua["mapping_not_attempted"] == 1
+    assert ua["anonymous_read_verified"] == 1
+    assert exported["scan"]["findings"]
+    serialized = technical.text
+    for sentinel in (
+        "NODE_SENTINEL", "SECRET_SENTINEL", "UA_NODE_SENTINEL",
+        "UA_PRODUCT_SENTINEL", "UA_METADATA_SENTINEL", "a" * 64,
+        "NODE_METADATA_SENTINEL", "DISPLAY_SENTINEL", "TYPE_SENTINEL",
+        "BANNER_SECRET_SENTINEL", "POLICY_SENTINEL", "PROFILE_SENTINEL",
+    ):
+        assert sentinel not in serialized
+    port = next(item for host in exported["scan"]["hosts"] for item in host["ports"]
+                if item["port"] == 4840)
+    assert port["service"] == "opcua"
+    assert port["version"] is None
+    ua_service = next(item for host in exported["scan"]["hosts"]
+                      for item in host["industrial_services"]
+                      if item["protocol"] == "opcua_tcp")
+    assert ua_service["observation"] is None
+
+    explained = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}/reports/explained",
+        params={"language": "en"},
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+    assert explained.status_code == 200
+    education = explained.json()["sections"]
+    assert education["industrial_protocols"] == exported["industrial_protocols"]
+    ua_device_service = next(
+        item for device in education["devices"] for item in device["services"]
+        if item["port"] == 4840
+    )
+    assert ua_device_service["service"] == "opcua"
+    assert ua_device_service["version"] is None
+    styles = {name: ParagraphStyle(name, fontName="Helvetica", fontSize=9)
+              for name in ("ReportBody", "ReportHeading", "ReportChapter",
+                           "ReportCard", "ReportSmall", "ReportDevice")}
+    story: list[object] = []
+    append_education(
+        story, education, styles, REPORT_COPY["en"], "en", 460, "Helvetica"
+    )
+    pdf_text = "\n".join(line for item in story for line in _flowable_text(item))
+    assert "Industrial services by protocol" in pdf_text
+    assert "OPC UA" in pdf_text and "Modbus TCP" in pdf_text
+    assert "anonymous reads verified: 1" in pdf_text
+    for sentinel in (
+        "BANNER_SECRET_SENTINEL", "NODE_SENTINEL", "SECRET_SENTINEL",
+        "UA_NODE_SENTINEL", "UA_METADATA_SENTINEL", "POLICY_SENTINEL",
+        "PROFILE_SENTINEL", "DISPLAY_SENTINEL", "TYPE_SENTINEL", "a" * 64,
+    ):
+        assert sentinel not in pdf_text
+
+    pdf_response = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}/reports/explained/download",
+        params={"language": "en"},
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+    assert pdf_response.status_code == 200
+    assert pdf_response.content.startswith(b"%PDF-")
+    assert b"BANNER_SECRET_SENTINEL" not in pdf_response.content
+    pdf_path = tmp_path / "dmitri-task7-explained.pdf"
+    pdf_path.write_bytes(pdf_response.content)
 
 
 def test_explained_report_is_available_without_ai_analysis(

@@ -238,7 +238,12 @@ class IndustrialServiceRecord(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("scan_host_id", "protocol", "port"),
         CheckConstraint(
-            "protocol IN ('modbus_tcp')", name="ck_industrial_services_protocol"
+            "protocol IN ('modbus_tcp', 'opcua_tcp')",
+            name="ck_industrial_services_protocol",
+        ),
+        CheckConstraint(
+            "protocol = 'opcua_tcp' OR opcua_observation_json IS NULL",
+            name="ck_industrial_services_opcua_observation_protocol",
         ),
         CheckConstraint(
             "confidence IN ('suspected', 'confirmed')",
@@ -257,6 +262,9 @@ class IndustrialServiceRecord(SQLModel, table=True):
         default_factory=list, sa_column=Column(JSON)
     )
     write_requests_sent: int = Field(default=0)
+    opcua_observation_json: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSON(none_as_null=True))
+    )
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 

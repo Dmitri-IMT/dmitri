@@ -30,11 +30,13 @@ def inventory_modbus_host(
     controller: ModbusClientController | None = None,
     sleep: Callable[[float], None] = time.sleep,
     deadline: float | None = None,
+    request_budget: int = 32,
 ) -> list[ModbusService]:
     """Build a bounded Modbus inventory for one host."""
 
     effective_policy = policy or OtAutomationPolicy()
     services: list[ModbusService] = []
+    remaining_requests = max(0, request_budget)
     for port in sorted(host.open_ports, key=lambda item: item.port):
         if not _is_modbus_candidate(port):
             continue
@@ -51,8 +53,10 @@ def inventory_modbus_host(
                 controller=controller,
                 sleep=sleep,
                 deadline=deadline,
+                request_budget=remaining_requests,
             )
         )
+        remaining_requests = max(0, remaining_requests - services[-1].requests_sent)
     return services
 
 
@@ -71,6 +75,7 @@ def _inventory_port(
     controller: ModbusClientController | None,
     sleep: Callable[[float], None],
     deadline: float | None,
+    request_budget: int,
 ) -> ModbusService:
     evidence = ["tcp-port"]
     service_name = port.service.name.lower()
@@ -103,7 +108,8 @@ def _inventory_port(
                 or not unit.device_identification.has_structured_fields
             )
         ][:MAX_IDENTIFICATION_FALLBACKS_PER_HOST]
-        if not units:
+        fallback_ids = fallback_ids[: max(0, request_budget)]
+        if not units and request_budget > 0:
             fallback_ids = [DEFAULT_FALLBACK_UNIT_ID]
 
         delay_seconds = policy.inter_request_delay_ms / 1000
@@ -134,7 +140,7 @@ def _inventory_port(
                     status="error",
                     error=type(exc).__name__,
                 )
-            requests_sent += 1
+            requests_sent += int(result.request_sent)
             timeouts += int(result.status == "timeout")
             merge_unit(units, result)
         if requests_sent:

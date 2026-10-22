@@ -73,7 +73,8 @@ def service_family(service: str | None) -> str:
         return "web"
     if name in {"vnc", "ms-wbt-server", "rdp", "x11"}:
         return "desktop"
-    if "modbus" in name or name in {"s7", "s7comm", "ethernet-ip"}:
+    if ("modbus" in name or "opcua" in name or "opc ua" in name
+            or name in {"s7", "s7comm", "ethernet-ip"}):
         return "industrial"
     return "other_service"
 
@@ -153,6 +154,67 @@ def finding_semantic_limit(
                 status=text("status_" + status, language))
 
 
+def industrial_protocol_summary(hosts: list[Any]) -> dict[str, dict[str, int]]:
+    summary = {
+        protocol: {"service_count": 0, "confirmed_services": 0,
+                   "suspected_services": 0, "mapping_completed": 0,
+                   "mapping_limited": 0, "mapping_not_attempted": 0,
+                   "anonymous_read_verified": 0}
+        for protocol in ("modbus_tcp", "opcua_tcp")
+    }
+    for host in hosts:
+        for service in host.industrial_services:
+            counts = summary[service.protocol]
+            counts["service_count"] += 1
+            counts["confirmed_services" if service.confidence == "confirmed"
+                   else "suspected_services"] += 1
+            if service.protocol == "opcua_tcp":
+                observation = service.observation
+                mapping = observation.mapping if observation else None
+                if mapping and mapping.phase.status == "completed":
+                    counts["mapping_completed"] += 1
+                elif mapping:
+                    counts["mapping_limited"] += 1
+                else:
+                    counts["mapping_not_attempted"] += 1
+                if (mapping and mapping.application_value_read_succeeded is True
+                        and mapping.value_good_count > 0):
+                    counts["anonymous_read_verified"] += 1
+            else:
+                if service.mapping_source in {
+                    None, "service_granularity", "discovery_only",
+                }:
+                    counts["mapping_not_attempted"] += 1
+                elif any(unit.status == "responding" for unit in service.units):
+                    counts["mapping_completed"] += 1
+                else:
+                    counts["mapping_limited"] += 1
+    return summary
+
+
+def report_data_boundary(detail: ScanDetailResponse) -> ScanDetailResponse:
+    """Return report data with OPC UA banner and observation fields removed per host."""
+    safe_hosts = []
+    for host in detail.hosts:
+        opcua_ports = {
+            service.port for service in host.industrial_services
+            if service.protocol == "opcua_tcp"
+        }
+        safe_hosts.append(host.model_copy(update={
+            "ports": [
+                port.model_copy(update={"service": "opcua", "version": None})
+                if port.protocol == "tcp" and port.port in opcua_ports else port
+                for port in host.ports
+            ],
+            "industrial_services": [
+                service.model_copy(update={"observation": None})
+                if service.protocol == "opcua_tcp" else service
+                for service in host.industrial_services
+            ],
+        }))
+    return detail.model_copy(update={"hosts": safe_hosts})
+
+
 def _advisory_effects(description: str, language: AILanguage) -> list[str]:
     """Label explicit advisory terms as general effects, not target conclusions."""
     value = description.casefold()
@@ -183,6 +245,8 @@ def build_report_education(
     enrichment: dict[str, int] | None = None,
     analysis: ScanAIAnalysis | None = None,
 ) -> ReportEducation:
+    industrial_protocols = industrial_protocol_summary(detail.hosts)
+    detail = report_data_boundary(detail)
     advisories = advisories or {}
     explanations = {item.finding_id: item for item in analysis.important_findings} \
         if analysis else {}
@@ -191,6 +255,12 @@ def build_report_education(
         address = str(finding.host_ip) if finding.host_ip else ""
         host_findings[address].append(finding)
     hosts = {str(host.ip): host for host in detail.hosts}
+    opcua_ports = {
+        (str(host.ip), service.port)
+        for host in detail.hosts
+        for service in host.industrial_services
+        if service.protocol == "opcua_tcp"
+    }
     observations = Counter(_basis(finding) for finding in detail.findings)
     groups: dict[
         tuple[str, str, int | None, str | None, str, str, str | None, bool],
@@ -252,8 +322,12 @@ def build_report_education(
             "title": profile["name"],
             "port": port,
             "protocol": protocol,
-            "service": findings[0].service,
-            "version": observed_port.version if observed_port else None,
+            "service": ("opcua" if (address, port) in opcua_ports
+                        else findings[0].service),
+            "version": (
+                None if (address, port) in opcua_ports
+                else observed_port.version if observed_port else None
+            ),
             "finding_count": len(findings),
             "severity": _maximum_severity(findings),
             "severity_counts": _severity_counts(findings),
@@ -326,7 +400,9 @@ def build_report_education(
                 "evidence_truncated": False,
                 "evidence_observations": [],
                 "port": port.port, "protocol": port.protocol,
-                "service": port.service, "version": port.version,
+                "service": port.service,
+                "version": (None if (str(host.ip), port.port) in opcua_ports
+                            else port.version),
                 "finding_count": 0, "severity": None, "severity_counts": {},
                 "cves": [], "purpose": profile["purpose"],
                 "meaning": profile["meaning"], "impact": profile["impact"],
@@ -381,7 +457,9 @@ def build_report_education(
             ) else "no_alerts",
             "services": [
                 {"port": port.port, "protocol": port.protocol,
-                 "service": port.service, "version": port.version,
+                 "service": port.service,
+                 "version": (None if (address, port.port) in opcua_ports
+                             else port.version),
                  "family": service_family(port.service),
                  "purpose": guide(service_family(port.service), language)["purpose"],
                  "finding_count": sum(item.port == port.port
@@ -448,7 +526,7 @@ def build_report_education(
     service_counts = Counter(port["family"] for device in devices
                              for port in device["services"])
     return {
-        "version": "3", "devices": devices, "issue_groups": issue_groups,
+        "version": "4", "devices": devices, "issue_groups": issue_groups,
         "severity_counts": _severity_counts(detail.findings),
         "evidence_counts": {key: observations[key]
                             for key in ("observation", "correlation", "other")},
@@ -463,6 +541,7 @@ def build_report_education(
         ],
         "finding_observations_truncated": detail.finding_observations_truncated,
         "service_counts": dict(service_counts),
+        "industrial_protocols": industrial_protocols,
         "affected_hosts": sum(item["finding_count"] > 0 for item in devices),
         "hosts_without_findings": sum(item["finding_count"] == 0 for item in devices),
         "unassigned_findings": len(host_findings[""]),

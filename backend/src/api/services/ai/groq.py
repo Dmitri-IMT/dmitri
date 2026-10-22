@@ -22,7 +22,7 @@ from api.services.ai.writing import WRITING_SKILL_INSTRUCTIONS
 _ProviderResponseT = TypeVar("_ProviderResponseT", bound=BaseModel)
 
 GROQ_PROVIDER_ID = "groq"
-AI_PROMPT_VERSION = "7"
+AI_PROMPT_VERSION = "8"
 
 # Keep scan analysis well below Groq's shared per-minute token budget. The
 # configured global completion limit is intended for interactive requests; a
@@ -53,6 +53,11 @@ Never infer that the scan is clean or that vulnerabilities are absent because
 findings are missing. Explain the result clearly for a non-specialist. Keep
 recommendations defensive and high-level, and return exactly the requested
 structured schema.
+Industrial protocol summaries are aggregate counts only. A suspected service or
+announced OPC UA endpoint/security setting does not prove anonymous access. Only
+`anonymous_read_verified` records a successful anonymous application value read.
+Mapping limits and absent mapping are not evidence that a service is safe or absent.
+Do not infer industrial findings, severity, process state, or CVEs from these counts.
 Write all explanatory prose in {language_name}.
 {writing_skill_instructions}
 """
@@ -123,6 +128,10 @@ scope; bounded finding lists are samples and must not be presented as complete l
 For questions asking which equipment has more vulnerabilities, use the deterministic
 `machine_vulnerability_summary` counts and name the machine and count directly; do not
 claim that per-host totals are unavailable when that field is present.
+Industrial protocol summaries contain aggregate counts only. An announced OPC UA
+endpoint or security setting does not prove anonymous access; use only the explicit
+anonymous_read_verified count as evidence of a successful anonymous value read. Do
+not infer industrial findings, severity, process state, or CVEs from these counts.
 
 USER_QUESTION:
 {question}
@@ -275,6 +284,9 @@ class GroqProvider:
                 ),
                 "kev_findings": context.kev_findings,
                 "severity": context.severity.model_dump(mode="json"),
+                "industrial_protocols": context.industrial_protocols.model_dump(
+                    mode="json"
+                ),
             },
             "validated_child_results": child_results,
             "failed_finding_refs": list(failed_refs),

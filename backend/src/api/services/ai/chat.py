@@ -34,6 +34,7 @@ from api.services.ai.context import (
     machine_display_value,
     reference_names,
     replace_ai_references,
+    summarize_industrial_protocols,
 )
 from api.services.ai.groq import AIProviderError
 from api.services.scan_evidence import (
@@ -101,6 +102,10 @@ def build_scan_chat_bundle(
             or FindingEvidenceSummary.model_validate(
                 summarize_finding_evidence(detail.findings, scope="scan")
             ),
+            industrial_protocols=summarize_industrial_protocols(
+                service for host in detail.hosts
+                for service in host.industrial_services
+            ),
         ),
         finding_ids_by_ref=bundle.finding_ids_by_ref,
         display_values_by_ref=bundle.display_values_by_ref,
@@ -149,6 +154,9 @@ def build_host_chat_bundle(
                 summarize_finding_evidence(
                     findings, scope="filtered_findings"
                 )
+            ),
+            industrial_protocols=summarize_industrial_protocols(
+                host.industrial_services
             ),
         ),
         finding_ids_by_ref=bundle.finding_ids_by_ref,

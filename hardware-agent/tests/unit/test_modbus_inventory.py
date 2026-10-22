@@ -72,6 +72,7 @@ def test_fc43_enriches_unit_found_by_nse() -> None:
                 vendor_name="ACME",
                 product_code="PLC-7",
             ),
+            request_sent=True,
         )
 
     service = inventory_modbus_host(
@@ -93,7 +94,7 @@ def test_open_502_uses_only_bounded_unit_one_fallback() -> None:
 
     def probe(host, port_number, unit_id, *, timeout):
         probe_calls.append(unit_id)
-        return ModbusUnit(unit_id=unit_id, status="timeout")
+        return ModbusUnit(unit_id=unit_id, status="timeout", request_sent=True)
 
     service = inventory_modbus_host(
         _host(port), probe=probe, sleep=lambda _: None
@@ -104,6 +105,82 @@ def test_open_502_uses_only_bounded_unit_one_fallback() -> None:
     assert service.requests_sent == 1
     assert service.timeouts == 1
     assert service.units[0].status == "timeout"
+
+
+def test_zero_request_budget_does_not_send_fallback_probe() -> None:
+    port = PortInfo(port=502, service=ServiceInfo(name="unknown"))
+    probe_calls = []
+
+    service = _inventory_port(
+        "192.168.10.30",
+        port,
+        policy=OtAutomationPolicy(),
+        timeout=1.5,
+        cancel_event=None,
+        probe=lambda *args, **kwargs: probe_calls.append((args, kwargs))
+        or ModbusUnit(unit_id=1, status="timeout", request_sent=True),
+        controller=None,
+        sleep=lambda _: None,
+        deadline=None,
+        request_budget=0,
+    )
+
+    assert probe_calls == []
+    assert service.requests_sent == 0
+
+
+def test_modbus_connection_failure_does_not_count_an_unsent_request() -> None:
+    from agent.ot.modbus.client import probe_device_identification
+
+    class FailedClient:
+        def __init__(self, *_args, **_kwargs):
+            self.read_calls = 0
+
+        def connect(self):
+            return False
+
+        def read_device_information(self, **_kwargs):
+            self.read_calls += 1
+            raise AssertionError("request must not be attempted")
+
+        def close(self):
+            pass
+
+    client = FailedClient()
+    service = inventory_modbus_host(
+        _host(PortInfo(port=502, service=ServiceInfo(name="unknown"))),
+        probe=lambda host, port, unit, **kwargs: probe_device_identification(
+            host, port, unit, timeout=kwargs["timeout"],
+            client_factory=lambda *_args, **_kwargs: client,
+        ),
+        sleep=lambda _: None,
+    )[0]
+
+    assert service.requests_sent == 0
+    assert client.read_calls == 0
+
+
+def test_inventory_budget_is_shared_across_candidate_ports() -> None:
+    host = HostInfo(
+        ip="192.168.10.30",
+        hostname="plc",
+        ports=[
+            PortInfo(port=502, service=ServiceInfo(name="modbus")),
+            PortInfo(port=1502, service=ServiceInfo(name="modbus")),
+        ],
+    )
+    probe_calls = []
+
+    services = inventory_modbus_host(
+        host,
+        request_budget=1,
+        probe=lambda _host, port, unit_id, **_kwargs: probe_calls.append(port)
+        or ModbusUnit(unit_id=unit_id, status="timeout", request_sent=True),
+        sleep=lambda _delay: None,
+    )
+
+    assert probe_calls == [502]
+    assert sum(service.requests_sent for service in services) == 1
 
 
 def test_non_modbus_port_and_cancelled_scan_send_no_requests() -> None:
@@ -149,6 +226,7 @@ def test_struct_error_on_one_unit_preserves_sibling_units() -> None:
             unit_id=unit_id,
             status="responding",
             device_identification=ModbusDeviceIdentification(vendor_name="ACME"),
+            request_sent=True,
         )
 
     service = inventory_modbus_host(
@@ -178,7 +256,7 @@ def test_nse_responding_unit_stays_responding_after_fallback_timeout() -> None:
     )
 
     def probe(host, port_number, unit_id, *, timeout, **kwargs):
-        return ModbusUnit(unit_id=unit_id, status="timeout")
+        return ModbusUnit(unit_id=unit_id, status="timeout", request_sent=True)
 
     service = inventory_modbus_host(
         _host(port), probe=probe, sleep=lambda _: None
@@ -193,7 +271,7 @@ def test_past_deadline_skips_fallback_without_probe() -> None:
 
     def probe(host, port_number, unit_id, *, timeout, **kwargs):
         probe_calls.append(unit_id)
-        return ModbusUnit(unit_id=unit_id, status="responding")
+        return ModbusUnit(unit_id=unit_id, status="responding", request_sent=True)
 
     service = _inventory_port(
         "192.168.10.30",
@@ -205,6 +283,7 @@ def test_past_deadline_skips_fallback_without_probe() -> None:
         controller=None,
         sleep=lambda _: None,
         deadline=perf_counter() - 1,
+        request_budget=32,
     )
 
     assert probe_calls == []
@@ -237,6 +316,7 @@ def test_cancel_during_fallback_does_not_stamp_skipped_units() -> None:
             unit_id=unit_id,
             status="responding",
             device_identification=ModbusDeviceIdentification(vendor_name="ACME"),
+            request_sent=True,
         )
 
     service = _inventory_port(
@@ -249,6 +329,7 @@ def test_cancel_during_fallback_does_not_stamp_skipped_units() -> None:
         controller=None,
         sleep=lambda _: None,
         deadline=None,
+        request_budget=32,
     )
     by_id = {unit.unit_id: unit for unit in service.units}
 
@@ -280,7 +361,7 @@ def test_identification_probes_sleep_before_each_fc43() -> None:
 
     def probe(host, port_number, unit_id, *, timeout, **kwargs):
         probe_calls.append(unit_id)
-        return ModbusUnit(unit_id=unit_id, status="responding")
+        return ModbusUnit(unit_id=unit_id, status="responding", request_sent=True)
 
     inventory_modbus_host(
         _host(port),

@@ -9,6 +9,7 @@ import yaml
 from api.core import home_constants
 from api.main import app
 from api.schemas.agent_frames import AgentUpdateFrame
+from api.schemas.scan import CoverageUnitPayload
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = REPO_ROOT / "contracts" / "openapi" / "openapi.yaml"
@@ -32,6 +33,7 @@ ERROR_RESPONSE_ROUTES = {
 }
 
 SCHEMA_NAMES = (
+    "CoverageUnitPayload",
     "AssessmentEvidencePayload",
     "FindingEvidenceObservationPayload",
     "FindingEvidenceMethodCounts",
@@ -48,6 +50,16 @@ SCHEMA_NAMES = (
     "HostSummary",
     "ScanHostView",
     "IndustrialServiceView",
+    "OpcUaServiceView",
+    "OpcUaEndpointPayload",
+    "OpcUaIdentityPayload",
+    "OpcUaPhasePayload",
+    "OpcUaObservationPayload",
+    "OpcUaMappedReferencePayload",
+    "OpcUaMappedNodePayload",
+    "OpcUaSecurityFactPayload",
+    "OpcUaMappingPayload",
+    "OpcUaTcpServicePayload",
     "HostScanHistoryEntry",
     "HostDetailResponse",
     "HostListResponse",
@@ -122,6 +134,27 @@ UNIMPLEMENTED_PARAMS = {("/api/v1/hosts", "q")}
 
 def _load_contract() -> dict[str, Any]:
     return yaml.safe_load(CONTRACT_PATH.read_text())
+
+
+def test_coverage_evidence_sources_accept_every_agent_source() -> None:
+    source = REPO_ROOT / "hardware-agent/src/agent/normalize/contracts.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    coverage = next(
+        node for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "CoverageUnitPayload"
+    )
+    annotation = next(
+        node.annotation for node in coverage.body
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "evidence_source"
+    )
+    assert isinstance(annotation, ast.Subscript)
+    agent_sources = set(ast.literal_eval(annotation.slice))
+    backend_sources = set(
+        CoverageUnitPayload.model_json_schema()["properties"]["evidence_source"]["enum"]
+    )
+    assert agent_sources == backend_sources
 
 
 def _resolve_ref(spec: dict[str, Any], node: Any) -> Any:
@@ -247,6 +280,20 @@ def test_schema_matches_contract(schema_name: str):
     contract_schema = contract["components"]["schemas"][schema_name]
     assert _schema_fingerprint(contract, contract_schema) == _schema_fingerprint(
         app.openapi(), _app_schema(schema_name)
+    )
+
+
+def test_opcua_read_evidence_source_max_length_matches_contract():
+    contract_schema = _load_contract()["components"]["schemas"]["OpcUaServiceView"]
+    runtime_schema = _app_schema("OpcUaServiceView")
+
+    assert (
+        contract_schema["properties"]["evidence_sources"]["items"]["maxLength"]
+        == 64
+    )
+    assert (
+        runtime_schema["properties"]["evidence_sources"]["items"]["maxLength"]
+        == 64
     )
 
 

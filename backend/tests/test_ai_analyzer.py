@@ -110,6 +110,10 @@ def test_split_context_preserves_private_reference_maps():
     context = _context()
     context.evidence_completeness = "partial"
     context.stopped_by = "timeout"
+    context.industrial_protocols.opcua_tcp.service_count = 2
+    context.industrial_protocols.opcua_tcp.confirmed_services = 1
+    context.industrial_protocols.opcua_tcp.mapping_limited = 1
+    context.industrial_protocols.opcua_tcp.anonymous_read_verified = 1
     chunks = split_context(context, child_findings=1)
 
     assert [len(chunk.top_findings) for chunk in chunks] == [1, 1]
@@ -117,6 +121,10 @@ def test_split_context_preserves_private_reference_maps():
     assert set(chunks[1]._finding_ids_by_ref) == {"finding_2"}
     assert all(chunk.evidence_completeness == "partial" for chunk in chunks)
     assert all(chunk.stopped_by == "timeout" for chunk in chunks)
+    assert all(
+        chunk.industrial_protocols == context.industrial_protocols
+        for chunk in chunks
+    )
 
 
 class _BoundedProvider:

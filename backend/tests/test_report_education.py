@@ -1,17 +1,19 @@
 """Verify attribution, evidence boundaries and complete educational coverage."""
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 from api.models.persistence import EnrichmentJobRecord, NvdCacheRecord
-from api.schemas.read import ExposureRead
+from api.schemas.read import ExposureRead, OpcUaServiceView, Port
 from api.schemas.scan import FindingEvidenceObservationPayload
 from api.services.read import get_scan_detail
 from api.services.report_education import (
     build_report_education,
     device_identity,
     finding_semantic_limit,
+    industrial_protocol_summary,
     service_family,
 )
 from api.services.report_education_copy import REPORT_COPY, guide, text
@@ -20,6 +22,67 @@ from api.services.reports import build_scan_report
 from read_factories import make_scan, seed_read_graph
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Table
+
+
+def test_modbus_discovery_units_are_not_counted_as_mapping():
+    service = SimpleNamespace(
+        protocol="modbus_tcp", confidence="confirmed", mapping_source=None,
+        units=[SimpleNamespace(status="responding") for _ in range(3)],
+    )
+    result = industrial_protocol_summary([
+        SimpleNamespace(industrial_services=[service]),
+    ])
+    modbus = result["modbus_tcp"]
+    assert modbus["service_count"] == 1
+    assert modbus["mapping_not_attempted"] == 1
+    assert modbus["mapping_completed"] == modbus["mapping_limited"] == 0
+
+
+@pytest.mark.parametrize(
+    "mapping_source", [None, "service_granularity", "discovery_only"]
+)
+def test_modbus_mapping_source_controls_service_granularity(mapping_source):
+    service = SimpleNamespace(
+        protocol="modbus_tcp", confidence="confirmed",
+        mapping_source=mapping_source,
+        units=[SimpleNamespace(status="responding")],
+    )
+    summary = industrial_protocol_summary([
+        SimpleNamespace(industrial_services=[service]),
+    ])["modbus_tcp"]
+    assert summary["mapping_not_attempted"] == 1
+    assert summary["mapping_completed"] == summary["mapping_limited"] == 0
+
+
+def test_explained_report_boundary_is_host_scoped_without_findings(
+    administrative_session,
+):
+    _, detail = _detail(administrative_session)
+    host = detail.hosts[1]
+    detail.hosts[1] = host.model_copy(update={
+        "ports": [Port(
+            port=4840, protocol="tcp", state="open",
+            service="opcua", version="BANNER_SECRET_SENTINEL",
+        )],
+        "industrial_services": [OpcUaServiceView(
+            protocol="opcua_tcp", port=4840, confidence="confirmed",
+            evidence_sources=["valid_opcua_response"], observation=None,
+        )],
+    })
+    detail.findings = [detail.findings[0]]
+    detail.exposures.append(SimpleNamespace(
+        ip=host.ip, port=4840, protocol="tcp", attention="review",
+    ))
+
+    report = build_report_education(detail, "en")
+
+    issue = next(item for item in report["issue_groups"] if item["port"] == 4840)
+    assert issue["service"] == "opcua"
+    assert issue["version"] is None
+
+    detail.findings = []
+    report_without_findings = build_report_education(detail, "en")
+    assert any(item["port"] == 4840 for item in report_without_findings["issue_groups"])
 
 
 @pytest.mark.parametrize("language", ["en", "pt-BR", "ru"])
@@ -417,7 +480,7 @@ def test_education_v3_keeps_semantically_distinct_records_and_limits_per_group(
 
     result = build_report_education(detail, "en")
 
-    assert result["version"] == "3"
+    assert result["version"] == "4"
     assert result["evidence_counts"] == {
         "observation": 0,
         "correlation": 2,
@@ -524,7 +587,7 @@ def test_standalone_checks_are_limited_coverage_not_finding_totals(
 
     result = build_report_education(detail, "pt-BR")
 
-    assert result["version"] == "3"
+    assert result["version"] == "4"
     assert result["evidence_summary"]["total_records"] == 1
     assert result["evidence_counts"] == {
         "observation": 1,

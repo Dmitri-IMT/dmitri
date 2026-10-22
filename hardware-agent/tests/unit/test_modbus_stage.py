@@ -90,7 +90,12 @@ def test_ot_stage_runs_only_for_nspi_and_is_serial(monkeypatch) -> None:
     assert all(host.industrial_services for host in hosts)
     assert all(
         host.stage_coverage
-        == [StageCoverage("ot_inspection", "completed", "modbus_inspection")]
+        == [
+            StageCoverage(
+                "ot_inspection", "completed", "modbus_inspection", None,
+                502, "tcp", "modbus"
+            )
+        ]
         for host in hosts
     )
 
@@ -228,7 +233,7 @@ def test_ot_stage_cancel_does_not_emit_deadline() -> None:
     assert not ot_inspection.stage_deadline_reached
     assert ot_inspection.stage_deadline_seconds is None
     assert host.stage_coverage == [
-        StageCoverage("ot_inspection", "skipped", "not_run", "scan_cancelled")
+        StageCoverage("ot_inspection", "skipped", "modbus_inspection", "scan_cancelled")
     ]
     assert not any(event.kind == "ot_stage_deadline" for event in reporter.events)
     assert "modbus_stage_deadline_reached" not in build_metadata(
@@ -271,12 +276,14 @@ def test_ot_stage_deadline_emits_event_and_metadata(monkeypatch) -> None:
         event for event in reporter.events if event.kind == "ot_stage_deadline"
     ]
     assert len(deadline_events) == 1
-    assert "Time limit reached during Modbus inventory" in deadline_events[0].message
+    assert (
+        "Time limit reached during industrial inspection" in deadline_events[0].message
+    )
     assert deadline_events[0].units_skipped >= 1
     assert all(len(host.stage_coverage) == 1 for host in hosts)
-    assert StageCoverage("ot_inspection", "skipped", "not_run", "stage_budget") in [
-        host.stage_coverage[0] for host in hosts
-    ]
+    assert StageCoverage(
+        "ot_inspection", "skipped", "modbus_inspection", "stage_budget"
+    ) in [host.stage_coverage[0] for host in hosts]
 
     metadata = build_metadata(
         runner=_Runner(),
@@ -289,8 +296,8 @@ def test_ot_stage_deadline_emits_event_and_metadata(monkeypatch) -> None:
         partial_result=False,
         ot_inspection=ot_inspection,
     )
-    assert metadata["modbus_stage_deadline_reached"] is True
-    assert metadata["modbus_stage_deadline_seconds"] == 1
+    assert metadata["industrial_stage_deadline_reached"] is True
+    assert metadata["industrial_stage_deadline_seconds"] == 1
     assert metadata["partial_result"] is False
 
 
@@ -327,7 +334,8 @@ def test_ot_host_deadline_allows_remaining_hosts(monkeypatch) -> None:
         host.stage_coverage
         == [
             StageCoverage(
-                "ot_inspection", "partial", "modbus_inspection", "ot_host_deadline"
+                    "ot_inspection", "completed", "modbus_inspection", None,
+                    502, "tcp", "modbus"
             )
         ]
         for host in hosts

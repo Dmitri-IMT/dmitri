@@ -28,6 +28,16 @@ class ReportService(TypedDict):
     finding_count: int
 
 
+class ReportIndustrialProtocol(TypedDict):
+    service_count: int
+    confirmed_services: int
+    suspected_services: int
+    mapping_completed: int
+    mapping_limited: int
+    mapping_not_attempted: int
+    anonymous_read_verified: int
+
+
 class ReportDevice(TypedDict):
     address: str
     hostname: str
@@ -147,6 +157,7 @@ class ReportEducation(TypedDict):
     finding_observations: list[FindingEvidenceObservationPayload]
     finding_observations_truncated: bool
     service_counts: dict[str, int]
+    industrial_protocols: dict[str, ReportIndustrialProtocol]
     affected_hosts: int
     hosts_without_findings: int
     unassigned_findings: int
@@ -179,6 +190,7 @@ class TechnicalReportSections(TypedDict):
     scope: str
     scan_mode: str
     scan: ScanDetailResponse
+    industrial_protocols: dict[str, ReportIndustrialProtocol]
     risk_summary: ScanRiskSummaryResponse
     ai_analysis: ScanAIAnalysisCompleted | None
 
