@@ -27,6 +27,10 @@ and backend image consume this same tracked file. Its approved primary fingerpri
 `92BD91D03608EA3AFDB108AAB7EEC4E4E954DA7A`. Private signing material is kept outside the
 repository in protected custody.
 
+Releases are manual. The release workflow builds and publishes a package only when a maintainer
+pushes an annotated `agent-vX.Y.Z` tag on a `main` commit whose `hardware-agent/pyproject.toml`
+version is `X.Y.Z`. A merge to `main` alone does not publish a release.
+
 The selected static repository base is
 `https://dmitri-imt.github.io/dmitri/`. The Pages workflow can publish signed APT metadata and
 packages there. A selected hosting URL does not mean that a release has been published or that
