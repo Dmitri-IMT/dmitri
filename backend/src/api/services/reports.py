@@ -21,7 +21,11 @@ from api.schemas.reports import (
 from api.services.ai.jobs import get_scan_ai_analysis
 from api.services.nvd import parse_nvd_matches
 from api.services.read import get_scan_detail, get_scan_risk_summary
-from api.services.report_education import build_report_education
+from api.services.report_education import (
+    build_report_education,
+    industrial_protocol_summary,
+    report_data_boundary,
+)
 
 
 class ReportNotReadyError(ValueError):
@@ -76,9 +80,12 @@ def build_scan_report(
             ) + _method_limitations(language, detail.assessment_status),
         )
     else:
+        industrial_protocols = industrial_protocol_summary(detail.hosts)
+        safe_detail = report_data_boundary(detail)
         sections = TechnicalReportSections(
             scan_timestamp=detail.timestamp, scope=detail.subnet,
-            scan_mode=detail.scan_mode, scan=detail, risk_summary=risk,
+            scan_mode=detail.scan_mode, scan=safe_detail,
+            industrial_protocols=industrial_protocols, risk_summary=risk,
             ai_analysis=completed,
         )
     extension = "pdf" if kind == "explained" else "json"

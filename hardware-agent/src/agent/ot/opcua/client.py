@@ -17,6 +17,10 @@ from .models import (
 
 MAX_REQUEST_BUDGET = 32
 MAX_OPERATION_TIMEOUT_SECONDS = 2.0
+# The helper's network timeout remains independently capped at two seconds. This
+# grace only bounds how long the parent allows a cold worker process to start
+# and return its result; it is not part of the OPC UA operation timeout.
+HELPER_STARTUP_GRACE_SECONDS = 4.0
 _ERRORS: set[str] = {
     "invalid_target",
     "unsupported_operation",
@@ -177,7 +181,10 @@ class OpcUaClient:
                 timeout=(
                     overall_timeout
                     if overall_timeout is not None
-                    else timeout_ms / 1000 + 4.0
+                    else min(
+                        timeout_ms / 1000 + HELPER_STARTUP_GRACE_SECONDS,
+                        30.0,
+                    )
                 ),
             )
             if len(stdout) > 128 * 1024:

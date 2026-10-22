@@ -78,11 +78,25 @@ def test_ci_builds_and_installs_the_arm64_agent_and_installs_backend_test_extras
     package_job = workflow["jobs"]["agent-package"]
     assert package_job["runs-on"] == "ubuntu-24.04-arm"
     package_steps = "\n".join(step.get("run", "") for step in package_job["steps"])
+    package_content = "\n".join(
+        f"{step.get('name', '')}\n{step.get('run', '')}"
+        for step in package_job["steps"]
+    )
     assert "hardware-agent-updater.deb" in package_steps
     assert 'Architecture)" = arm64' in package_steps
     assert 'Architecture)" = all' in package_steps
     assert "dpkg --install" in package_steps
     assert "/opt/dmitri-agent/.venv/bin/dmitri" in package_steps
+    assert "Verify installed OPC UA runtime and health CLI" in package_content
+    assert "import asyncua, cryptography" in package_steps
+    assert (
+        "Exercise inventory and bounded mapping against loopback OPC UA lab"
+        in package_content
+    )
+    assert "hardware-agent/packaging/opcua-loopback-smoke.py" in package_steps
+    smoke = (ROOT / "packaging/opcua-loopback-smoke.py").read_text(encoding="utf-8")
+    assert '"127.0.0.1"' in smoke
+    assert "opc.tcp://127.0.0.1:" in smoke
 
     backend_steps = "\n".join(
         step.get("run", "") for step in workflow["jobs"]["backend"]["steps"]

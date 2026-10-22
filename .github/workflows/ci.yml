@@ -281,3 +281,19 @@ jobs:
           /opt/dmitri-agent/.venv/bin/dmitri __dmitri_install_smoke_check__ >/tmp/install-smoke.log 2>&1 && exit 1 || status=$?
           test "$status" -eq 2
           grep -q 'Unknown command' /tmp/install-smoke.log
+
+      - name: Verify installed OPC UA runtime and health CLI
+        run: |
+          set -eu
+          agent_python=/opt/dmitri-agent/.venv/bin/python
+          agent_cli=/opt/dmitri-agent/.venv/bin/dmitri
+          export XDG_DATA_HOME=/tmp/dmitri-agent-smoke-data
+          mkdir -p "$XDG_DATA_HOME/dmitri/results"
+          "$agent_python" -c 'import asyncua, cryptography; from agent.ot.opcua.client import OpcUaClient; from agent.ot.opcua.inventory import inventory_opcua_service; from agent.ot.opcua.mapper import map_opcua_service; print("OPC UA runtime imports passed")'
+          "$agent_cli" health --json > /tmp/agent-health.json
+          "$agent_python" -c 'import json; data=json.load(open("/tmp/agent-health.json")); assert data["ok"] and data["imports"] and data["config_readable"] and data["results_directory_accessible"], data'
+
+      - name: Exercise inventory and bounded mapping against loopback OPC UA lab
+        run: |
+          set -eu
+          /opt/dmitri-agent/.venv/bin/python hardware-agent/packaging/opcua-loopback-smoke.py

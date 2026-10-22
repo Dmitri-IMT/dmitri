@@ -1,6 +1,6 @@
 # Contextualização e harness dos subagentes — OPC UA
 
-Status: execution authorized by user; Task 1 complete and reviewer-approved. Wait for the user's command before starting Task 2.
+Status: Tasks 1–9, M1 and M2 complete and reviewer-approved. The user authorized Tasks 7, 8 and 9 sequentially on 2026-10-22; stop after Task 9.
 Planning is complete; follow the current task state in TASKS.md and stay within its target files.
 
 Prioridade do usuário (2026-10-20): desenvolver para o front. Na TUI, limitar trabalho

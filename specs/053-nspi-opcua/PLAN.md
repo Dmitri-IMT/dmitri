@@ -1,11 +1,11 @@
 # Plano de execução — OPC UA no NSPi
 
-Status: Tasks 1–6, M1 and M2 complete and reviewer-approved. Python migration is complete.
-The user authorized Tasks 5–6 on 2026-10-22 and approved the existing UI design.
-Task 7 awaits a new command. Sequence is 7 → 8 → 9.
+Status: Tasks 1–9, M1 and M2 complete and reviewer-approved. Stop after Task 9; no subsequent task was authorized.
+The user authorized Tasks 5–6 and approved the existing UI design on 2026-10-22.
+The user authorized Tasks 7 → 8 → 9 on 2026-10-22; stop after Task 9.
 Task 5 validation used isolated `dmitri_test`, with 1,802 full-suite passes and the sole missing-agent environment failure passing after dependency installation. Task 6 validation passed 789 full-suite tests, 97 final focused tests, lint, formatting, typecheck, build and generated-type freshness checks. Migration 44 was not deployed to the running historical database.
 Completed task numbers and review history are retained.
-Branch/base: `feature/nspi-scan-opcua`, `971ba8d`.
+Branch/base: `feature/nspi-scan-opcua`, `fe182a0` (Tasks 5–6 synced).
 
 ## Active Python migration
 

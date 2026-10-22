@@ -114,6 +114,7 @@ def test_cleanup_reservations_are_independent_and_ordinary_budget_stops_early() 
 async def test_direct_guard_rejects_wrong_kind_and_matching_subclass_name() -> None:
     left, right = socket.socketpair()
     left.setblocking(False)
+    right.setblocking(False)
     adapter = RawSocketAdapter(left, RequestGate(8))
     protocol = GuardedProtocol(adapter, 1)
     protocol.connection_made(adapter)
@@ -147,6 +148,7 @@ async def test_direct_guard_rejects_wrong_kind_and_matching_subclass_name() -> N
 async def test_direct_guard_checks_mutated_request_type_id_before_wire_write() -> None:
     left, right = socket.socketpair()
     left.setblocking(False)
+    right.setblocking(False)
     adapter = RawSocketAdapter(left, RequestGate(8))
     protocol = GuardedProtocol(adapter, 1)
     protocol.connection_made(adapter)

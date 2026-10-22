@@ -8,6 +8,7 @@ from api.core.config import get_settings
 from api.models.command import Agent
 from api.models.identity import Org
 from api.models.persistence import (
+    FindingRecord,
     HostRecord,
     IndustrialServiceRecord,
     ModbusUnitRecord,
@@ -321,6 +322,10 @@ def test_opcua_and_modbus_persist_and_read_idempotently(
     _persist(runtime_session, scan, seeded_org, provisioned_agent)
     scan_host = runtime_session.exec(select(ScanHostRecord)).one()
 
+    # OPC UA announcements and mapping observations are not findings in this release.
+    assert runtime_session.exec(
+        select(FindingRecord).where(FindingRecord.scan_id == scan.scan_id)
+    ).all() == []
     assert len(runtime_session.exec(select(IndustrialServiceRecord)).all()) == 2
     assert len(runtime_session.exec(select(ModbusUnitRecord)).all()) == 2
     ua_row = runtime_session.exec(

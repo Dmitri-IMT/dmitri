@@ -1,10 +1,11 @@
 # Tasks — OPC UA integrado ao NSPi (`053-nspi-opcua`)
 
 11 sequential implementation units: original Tasks 1–9 plus migration M1/M2.
-**Tasks 1–6, M1 and M2 are complete and reviewed.** On 2026-10-22 the user authorized Tasks 5 and 6 sequentially and approved the UI design. Tasks 5–6 have reviewer approval; Task 7 awaits a new user command. User authorized replacing
-the C#/.NET helper entirely with Python. Latest scheduling instruction: finish the
-migration, then stop. **The user gave the new command for Tasks 5–6 on 2026-10-22.**
-Specs originally approved 2026-10-20. Base: `feature/nspi-scan-opcua` / `971ba8d`.
+**Tasks 1–9, M1 and M2 are complete and reviewed.** Tasks 5–6 were committed and
+synced as `fe182a0`. On 2026-10-22 the user authorized Tasks 7, 8 and 9 in sequence;
+implementation must stop after Task 9. User authorized replacing the C#/.NET helper
+entirely with Python. Specs originally approved 2026-10-20. Branch:
+`feature/nspi-scan-opcua` / current base `fe182a0`.
 Original completed entries and review history below remain unchanged. Their .NET
 targets describe the old implementation; active migration targets supersede them.
 
@@ -77,11 +78,12 @@ Cada tarefa segue coder Luna medium → test engineer Luna medium → reviewer S
 ## Task 7: Atualizar relatórios e contexto de IA
 - **Description**: Acrescentar resumo industrial por protocolo nas exportações e informações agregadas no contexto de IA, sem NodeIds, URLs, valores de processo ou dados de certificado. Governam A11–A14.
 - **Dependencies**: Task 6
-- **Target Files**: `backend/src/api/schemas/reports.py`, `backend/src/api/services/reports.py`, `backend/src/api/services/report_education.py`, `backend/src/api/services/report_education_copy.py`, `backend/src/api/services/report_education_pdf.py`, `backend/src/api/services/report_pdf.py`, `backend/src/api/services/ai/context.py`, `backend/src/api/services/ai/chat.py`, `backend/src/api/services/ai/groq.py`
-- **Tests**: `backend/tests/test_reports.py`, `test_report_schema.py`, `test_report_education.py`, `test_ai_context.py`, `test_ai_chat.py`.
+- **Target Files**: `backend/src/api/schemas/reports.py`, `backend/src/api/services/reports.py`, `backend/src/api/services/report_education.py`, `backend/src/api/services/report_education_copy.py`, `backend/src/api/services/report_education_pdf.py`, `backend/src/api/services/report_pdf.py`, `backend/src/api/services/ai/context.py`, `backend/src/api/services/ai/analyzer.py`, `backend/src/api/services/ai/chat.py`, `backend/src/api/services/ai/groq.py`
+- **Tests**: `backend/tests/test_reports.py`, `test_report_schema.py`, `test_report_education.py`, `test_ai_context.py`, `test_ai_analyzer.py`, `test_ai_chat.py`.
 - **Success Criteria**: JSON/PDF distinguem protocolos e limitações; conteúdo de IA é agregado e livre de dado operacional sensível; findings Modbus/NSE continuam iguais; PDF renderizado é inspecionado.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETE (reviewer approved; 94 focused tests, Ruff and diff check passed; explained PDF rendered and visually inspected, with banner sentinel absent)
+- **Review Rejections**: 2 (R1: PDF banner leak/A14 and Modbus discovery units counted as mapping/A11. R2: unbound/stale host address caused fallback crash and incomplete A14 redaction.)
+- **Review decision after repeated A14 finding**: retained the approved contract and applied a host-scoped report-data boundary shared across explained output paths.
 
 ## Task 8: Validar matriz ponta a ponta e regressões
 - **Description**: Completar testes integrados do laboratório, fronteira read-only, evidência, banco, front e regressão Modbus em conjunto. Governam A01–A16.
@@ -89,8 +91,8 @@ Cada tarefa segue coder Luna medium → test engineer Luna medium → reviewer S
 - **Target Files**: `hardware-agent/tests/fixtures/opcua_lab.py`, `hardware-agent/tests/integration/test_opcua_lab.py`, `hardware-agent/tests/unit/test_opcua_client.py`, `test_opcua_inventory.py`, `test_opcua_mapper.py`, `test_opcua_untrusted.py`, `backend/tests/test_scan_evidence.py`, `backend/tests/test_industrial_persistence.py`, `backend/tests/test_ingest_scan.py`, `frontend/src/pages/hosts/IndustrialServices.test.tsx`
 - **Tests**: matriz de sucesso, recusa, serviço hostil, limite, cancelamento, dual protocol, tráfego efetivamente observado, evidência sem finding e regressões existentes.
 - **Success Criteria**: nenhum serviço proibido chega ao peer; os contadores batem com o wire; entrada malformada/hostil não ultrapassa limites nem vaza; resultados Modbus e legado permanecem estáveis; ambiente de laboratório permanece isolado.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETE (reviewer approved; independent validation: 84 OPC UA unit tests, 20 UA/Modbus integration and stage tests, 90 backend tests on isolated `dmitri_test`, 13 frontend tests; focused Ruff and diff check passed)
+- **Review Rejections**: 1 (blocking socketpair peer in two transport tests; fixed and independently revalidated)
 
 ## Task 9: Validar empacotamento ARM64 e preparar uso real
 - **Description**: Executar gates finais por camada, conferir lock/wheelhouse para Linux ARM64 Python 3.12, imports, CLI e smoke OPC UA loopback; documentar limites da validação e checklist de ensaio real. Governam A13–A16.
@@ -98,8 +100,8 @@ Cada tarefa segue coder Luna medium → test engineer Luna medium → reviewer S
 - **Target Files**: `hardware-agent/pyproject.toml`, `hardware-agent/uv.lock`, `hardware-agent/packaging/build-deb.sh`, `.github/workflows/agent-release.yml`, documentação de deployment/validação identificada pelo code-map durante a tarefa.
 - **Tests**: gates do hardware-agent; smoke offline ARM64 Python 3.12 (import asyncua/cryptography, health CLI, inventário/mapping loopback); testes Python 3.11; gates backend/frontend já definidos na integração.
 - **Success Criteria**: wheelhouse lockado resolve sem rede no dispositivo alvo; pacote e CLI importam/funcionam; lab comprova comportamento sem ser apresentado como validação de PLC comercial; checklist de produção especifica o ensaio posterior com equipamento autorizado.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETE (final reviewer approved; native Raspberry Pi ARM64/Python 3.12 temporary offline venv passed imports, health CLI, and loopback inventory plus bounded mapping; Python 3.11 suite passed 1,698 tests with 27 skipped; independent final reviewer reran 17 release-workflow/client tests, Ruff and diff check passed)
+- **Review Rejections**: 2 (R1: ARM64 package smoke and Python 3.11 evidence missing; R2: QEMU loopback inconclusive. Both findings addressed with native Pi validation and clarified documentation.)
 
 ---
 

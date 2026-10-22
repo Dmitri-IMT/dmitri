@@ -109,6 +109,7 @@ def split_context(
             severity=context.severity,
             top_findings=selected,
             evidence_summary=context.evidence_summary,
+            industrial_protocols=context.industrial_protocols,
         )
         chunk._finding_ids_by_ref = {
             finding.finding_ref: context._finding_ids_by_ref[finding.finding_ref]

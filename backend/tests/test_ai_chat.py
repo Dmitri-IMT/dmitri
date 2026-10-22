@@ -248,7 +248,8 @@ def test_host_chat_bundle_sends_no_service_map() -> None:
     payload = bundle.provider_context.model_dump_json()
     assert "192.168.1.10" not in payload
     assert "plc-01" not in payload
-    assert "modbus" not in payload
+    assert bundle.provider_context.industrial_protocols.modbus_tcp.service_count == 0
+    assert bundle.provider_context.industrial_protocols.opcua_tcp.service_count == 0
     assert str(host_id) not in payload
     assert bundle.provider_context.machine_ref == "machine_1"
 
