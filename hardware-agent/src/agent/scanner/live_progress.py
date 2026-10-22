@@ -145,9 +145,7 @@ def _stage_for(kind: str, previous: ProgressStage, scan_mode: str) -> ProgressSt
         return (
             "targeted_assessment"
             if scan_mode in TARGETED_MODES and scan_mode != "nspi"
-            else "ot_inspection"
-            if scan_mode == "nspi"
-            else "normalization"
+            else "ot_inspection" if scan_mode == "nspi" else "normalization"
         )
     if kind in {
         "ot_stage_started",

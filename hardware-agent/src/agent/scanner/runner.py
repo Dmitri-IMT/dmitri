@@ -551,20 +551,31 @@ def _record_not_run(
                 and reached < _STAGE_ORDER.index("ot_inspection")
                 and any(
                     port.protocol.lower() == "tcp"
-                    and (port.port == 4840 or "opcua" in port.service.name.lower()
-                         or "opcuatcp" in port.service.name.lower())
+                    and (
+                        port.port == 4840
+                        or "opcua" in port.service.name.lower()
+                        or "opcuatcp" in port.service.name.lower()
+                    )
                     for port in host.open_ports
                 )
             ):
                 host.stage_coverage.extend(
                     StageCoverage(
-                        "ot_inspection", "skipped", "opcua_inspection", reason,
-                        port.port, "tcp", "opcua"
+                        "ot_inspection",
+                        "skipped",
+                        "opcua_inspection",
+                        reason,
+                        port.port,
+                        "tcp",
+                        "opcua",
                     )
                     for port in host.open_ports
                     if port.protocol.lower() == "tcp"
-                    and (port.port == 4840 or "opcua" in port.service.name.lower()
-                         or "opcuatcp" in port.service.name.lower())
+                    and (
+                        port.port == 4840
+                        or "opcua" in port.service.name.lower()
+                        or "opcuatcp" in port.service.name.lower()
+                    )
                 )
             if targeted and reached < _STAGE_ORDER.index("targeted_assessment"):
                 pending.append("targeted_assessment")

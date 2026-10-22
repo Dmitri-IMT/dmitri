@@ -2250,6 +2250,15 @@ export interface components {
         ScanAIAnalysisResponse: components["schemas"]["ScanAIAnalysisUnavailable"] | components["schemas"]["ScanAIAnalysisNotRequested"] | components["schemas"]["ScanAIAnalysisQueued"] | components["schemas"]["ScanAIAnalysisFailed"] | components["schemas"]["ScanAIAnalysisCompleted"];
         /** @enum {string} */
         ReportKind: "explained" | "technical";
+        ReportIndustrialProtocol: {
+            service_count: number;
+            confirmed_services: number;
+            suspected_services: number;
+            mapping_completed: number;
+            mapping_limited: number;
+            mapping_not_attempted: number;
+            anonymous_read_verified: number;
+        };
         /** ExplainedReportSections */
         ExplainedReportSections: {
             /** Version */
@@ -2274,6 +2283,10 @@ export interface components {
             /** Service Counts */
             service_counts: {
                 [key: string]: number;
+            };
+            /** Industrial Protocols */
+            industrial_protocols: {
+                [key: string]: components["schemas"]["ReportIndustrialProtocol"];
             };
             /** Affected Hosts */
             affected_hosts: number;
@@ -2557,6 +2570,10 @@ export interface components {
             /** Scan Mode */
             scan_mode: string;
             scan: components["schemas"]["ScanDetailResponse"];
+            /** Industrial Protocols */
+            industrial_protocols: {
+                [key: string]: components["schemas"]["ReportIndustrialProtocol"];
+            };
             risk_summary: components["schemas"]["ScanRiskSummaryResponse"];
             ai_analysis: components["schemas"]["ScanAIAnalysisCompleted"] | null;
         };

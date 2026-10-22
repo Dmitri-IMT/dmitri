@@ -16,6 +16,7 @@ from api.schemas.read import (
     SeverityBreakdown,
 )
 from api.services.ai.context import (
+    AI_CONTEXT_VERSION,
     AIFindingContext,
     FindingChatContext,
     ScanAIContext,
@@ -121,7 +122,10 @@ def test_groq_provider_requests_strict_structured_output():
     assert payload["response_format"]["json_schema"]["strict"] is True
     assert "Never claim a network" in payload["messages"][0]["content"]
     assert TEST_TOKEN not in json.dumps(payload)
-    assert '"context_version":"5"' in payload["messages"][1]["content"]
+    assert (
+        f'"context_version":"{AI_CONTEXT_VERSION}"'
+        in payload["messages"][1]["content"]
+    )
     assert not payload["messages"][1]["content"].startswith("Coverage limit:")
     assert "scan_id" not in payload["messages"][1]["content"]
     usage = provider.drain_usage_events()
@@ -268,7 +272,7 @@ def test_system_prompt_uses_a_language_placeholder():
 
 
 def test_system_prompt_preserves_evidence_uncertainty_and_sample_limits():
-    assert AI_PROMPT_VERSION == "7"
+    assert AI_PROMPT_VERSION == "8"
     prompts = " ".join(f"{SYSTEM_PROMPT} {USER_CHAT_PROMPT}".split())
     for rule in (
         "inconclusive evidence",

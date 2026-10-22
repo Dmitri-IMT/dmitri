@@ -477,8 +477,13 @@ def _protocol_coverage(
 
     def record(outcome, reason=None):
         return StageCoverage(
-            coverage[0], outcome, coverage[1], reason,
-            coverage[2], coverage[3], coverage[4]
+            coverage[0],
+            outcome,
+            coverage[1],
+            reason,
+            coverage[2],
+            coverage[3],
+            coverage[4],
         )
 
     outcomes = set(statuses)
@@ -646,17 +651,33 @@ def run_ot_inspection_stage(
                     for area in ranges
                 ):
                     statuses.append("partial")
-                host.stage_coverage.append(_protocol_coverage(
-                    statuses, cancel_event, host_deadline, "modbus_inspection",
-                    port=item.port, protocol="tcp", tool="modbus"))
+                host.stage_coverage.append(
+                    _protocol_coverage(
+                        statuses,
+                        cancel_event,
+                        host_deadline,
+                        "modbus_inspection",
+                        port=item.port,
+                        protocol="tcp",
+                        tool="modbus",
+                    )
+                )
         if has_opcua_candidate(host):
             for item in host.opcua_services:
                 statuses = [item.inventory_status]
                 if settings.nspi_submode == "read_only_mapping" and item.mapping:
                     statuses.append(item.mapping.status)
-                host.stage_coverage.append(_protocol_coverage(
-                    statuses, cancel_event, host_deadline, "opcua_inspection",
-                    port=item.port, protocol="tcp", tool="opcua"))
+                host.stage_coverage.append(
+                    _protocol_coverage(
+                        statuses,
+                        cancel_event,
+                        host_deadline,
+                        "opcua_inspection",
+                        port=item.port,
+                        protocol="tcp",
+                        tool="opcua",
+                    )
+                )
         hosts_done += 1
         _emit(
             reporter,
@@ -750,9 +771,12 @@ def _inventory_opcua_host(
 ) -> list[OpcUaInventory]:
     results: list[OpcUaInventory] = []
     candidates = [
-        port for port in sorted(host.open_ports, key=lambda item: item.port)
-        if port.protocol.lower() == "tcp" and (
-            port.port == 4840 or "opcua" in port.service.name.lower()
+        port
+        for port in sorted(host.open_ports, key=lambda item: item.port)
+        if port.protocol.lower() == "tcp"
+        and (
+            port.port == 4840
+            or "opcua" in port.service.name.lower()
             or "opcuatcp" in port.service.name.lower()
         )
     ]
@@ -838,11 +862,17 @@ def _inventory_opcua_host(
                 break
         except (OSError, RuntimeError, ValueError):
             from datetime import datetime, timezone
+
             results.append(
                 OpcUaInventory(
-                    "opcua_tcp", port.port, "suspected", ("tcp_candidate",),
-                    "failed", datetime.now(timezone.utc),
-                    reason_code="service_error", reason_codes=("service_error",),
+                    "opcua_tcp",
+                    port.port,
+                    "suspected",
+                    ("tcp_candidate",),
+                    "failed",
+                    datetime.now(timezone.utc),
+                    reason_code="service_error",
+                    reason_codes=("service_error",),
                 )
             )
             continue
@@ -867,10 +897,17 @@ def _inventory_opcua_host(
 
 def _opcua_unstarted(port, reason: str) -> OpcUaInventory:
     from datetime import datetime, timezone
+
     outcome = "timed_out" if reason == "host_deadline" else "partial"
     return OpcUaInventory(
-        "opcua_tcp", port.port, "suspected", ("tcp_candidate",), outcome,
-        datetime.now(timezone.utc), reason_code=reason, reason_codes=(reason,),
+        "opcua_tcp",
+        port.port,
+        "suspected",
+        ("tcp_candidate",),
+        outcome,
+        datetime.now(timezone.utc),
+        reason_code=reason,
+        reason_codes=(reason,),
     )
 
 
@@ -914,9 +951,11 @@ def _map_opcua_service(
                 except asyncio.CancelledError:
                     pass
                 return _opcua_skipped_mapping(
-                    "cancelled"
-                    if cancel_event and cancel_event.is_set()
-                    else "host_deadline",
+                    (
+                        "cancelled"
+                        if cancel_event and cancel_event.is_set()
+                        else "host_deadline"
+                    ),
                     request_count_known=False,
                 )
             await asyncio.sleep(0.05)
@@ -1064,15 +1103,19 @@ def _build_opcua_payload(service: OpcUaInventory) -> OpcUaTcpServicePayload:
                 "observed_at": result.observed_at,
             },
             "nodes": [
-                node.__dict__
-                if hasattr(node, "__dict__")
-                else {name: getattr(node, name) for name in node.__slots__}
+                (
+                    node.__dict__
+                    if hasattr(node, "__dict__")
+                    else {name: getattr(node, name) for name in node.__slots__}
+                )
                 for node in result.nodes
             ],
             "references": [
-                item.__dict__
-                if hasattr(item, "__dict__")
-                else {name: getattr(item, name) for name in item.__slots__}
+                (
+                    item.__dict__
+                    if hasattr(item, "__dict__")
+                    else {name: getattr(item, name) for name in item.__slots__}
+                )
                 for item in result.references
             ],
             "references_observed": result.references_observed,
@@ -1099,12 +1142,8 @@ def _build_opcua_payload(service: OpcUaInventory) -> OpcUaTcpServicePayload:
             "port": service.port,
             "confidence": service.confidence,
             "evidence_sources": list(service.evidence_sources),
-                "write_requests_sent": service.write_requests_sent
-                + (
-                    service.mapping.write_requests_sent
-                    if service.mapping
-                    else 0
-                ),
+            "write_requests_sent": service.write_requests_sent
+            + (service.mapping.write_requests_sent if service.mapping else 0),
             "observation": {
                 "schema_version": 1,
                 "inventory_phase": inventory_phase,

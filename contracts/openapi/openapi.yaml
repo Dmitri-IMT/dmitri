@@ -6644,6 +6644,25 @@ components:
     ReportKind:
       type: string
       enum: [explained, technical]
+    ReportIndustrialProtocol:
+      type: object
+      additionalProperties: false
+      required:
+      - service_count
+      - confirmed_services
+      - suspected_services
+      - mapping_completed
+      - mapping_limited
+      - mapping_not_attempted
+      - anonymous_read_verified
+      properties:
+        service_count: {type: integer}
+        confirmed_services: {type: integer}
+        suspected_services: {type: integer}
+        mapping_completed: {type: integer}
+        mapping_limited: {type: integer}
+        mapping_not_attempted: {type: integer}
+        anonymous_read_verified: {type: integer}
     ExplainedReportSections:
       properties:
         version:
@@ -6684,6 +6703,11 @@ components:
             type: integer
           type: object
           title: Service Counts
+        industrial_protocols:
+          additionalProperties:
+            $ref: '#/components/schemas/ReportIndustrialProtocol'
+          type: object
+          title: Industrial Protocols
         affected_hosts:
           type: integer
           title: Affected Hosts
@@ -6761,6 +6785,7 @@ components:
       - finding_observations
       - finding_observations_truncated
       - service_counts
+      - industrial_protocols
       - affected_hosts
       - hosts_without_findings
       - unassigned_findings
@@ -7316,6 +7341,11 @@ components:
           title: Scan Mode
         scan:
           $ref: '#/components/schemas/ScanDetailResponse'
+        industrial_protocols:
+          additionalProperties:
+            $ref: '#/components/schemas/ReportIndustrialProtocol'
+          type: object
+          title: Industrial Protocols
         risk_summary:
           $ref: '#/components/schemas/ScanRiskSummaryResponse'
         ai_analysis:
@@ -7329,6 +7359,7 @@ components:
       - scope
       - scan_mode
       - scan
+      - industrial_protocols
       - risk_summary
       - ai_analysis
       title: TechnicalReportSections

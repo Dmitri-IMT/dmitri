@@ -28,6 +28,7 @@ describe('ScanReports', () => {
         scan_timestamp: '2026-10-07T12:00:00Z',
         scope: '192.168.0.0/24',
         scan_mode: 'quick',
+        industrial_protocols: {},
         scan: {
           ...latestSuccessfulScan,
           scan_id: 'scan-1',
