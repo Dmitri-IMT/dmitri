@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ChevronRight } from 'lucide-react'
 import { Collapsible, Dialog } from 'radix-ui'
 import DialogShell from '@/components/DialogShell'
+import Disclosure from '@/components/Disclosure'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { useSession } from '@/auth/useSession'
@@ -12,7 +13,7 @@ import type {
   AgentUpdateAvailability,
   UpdateOperationView,
 } from '@/api/agentUpdates'
-import { useAgentUpdate } from '@/hooks/useAgentUpdate'
+import { ACTIVE_PHASES, useAgentUpdate } from '@/hooks/useAgentUpdate'
 import { useToast } from '@/hooks/useToast'
 import useI18n from '@/i18n/useI18n'
 import type { MessageKey } from '@/i18n/messages'
@@ -107,99 +108,94 @@ function OperationDetails({
   operation,
   language,
   t,
-  live = false,
 }: {
   operation: UpdateOperationView
   language: string
   t: (key: MessageKey, variables?: Record<string, string | number>) => string
-  live?: boolean
 }) {
-  const phase = t(phaseKeys[operation.phase])
-  const outcome = operation.local_outcome
-    ? t(`updates.outcome.${operation.local_outcome}` as MessageKey)
-    : t('updates.outcome.pending')
   return (
-    <>
-      {live && (
-        <p role="status" aria-live="polite" className="sr-only">
-          {phase}. {outcome}
+    <div className="flex flex-col gap-3" data-testid="agent-update-current">
+      <p className="text-body-md font-medium">
+        {operation.previous_version ?? t('updates.unknownValue')} →{' '}
+        {operation.target_version} · {t(phaseKeys[operation.phase])}
+      </p>
+      <dl className="flex flex-col gap-2">
+        <VersionRow
+          label={t('updates.packageVersion')}
+          value={operation.observed_package_version}
+          empty={t('updates.unknownValue')}
+        />
+        <VersionRow
+          label={t('updates.localOutcome')}
+          value={
+            operation.local_outcome
+              ? t(`updates.outcome.${operation.local_outcome}` as MessageKey)
+              : t('updates.outcome.pending')
+          }
+        />
+        <VersionRow
+          label={t('updates.observedVersion')}
+          value={operation.observed_version}
+          empty={t('updates.unknownValue')}
+        />
+        <VersionRow
+          label={t('updates.requestedBy')}
+          value={operation.actor_display_snapshot}
+        />
+      </dl>
+      <div className="flex flex-col gap-1 text-body-sm text-muted-foreground">
+        <p>
+          {t('updates.requestedAt', {
+            date: formatDate(operation.requested_at, language) ?? '—',
+          })}
         </p>
-      )}
-      <article
-        className="flex flex-col gap-3 border-t border-border pt-4"
-        data-testid={
-          live ? 'agent-update-current' : 'agent-update-history-item'
-        }
-      >
-        <p className="text-body-md font-medium">
-          {operation.previous_version ?? t('updates.unknownValue')} →{' '}
-          {operation.target_version} · {phase}
-        </p>
-        <dl className="flex flex-col gap-2">
-          <VersionRow
-            label={t('updates.packageVersion')}
-            value={operation.observed_package_version}
-            empty={t('updates.unknownValue')}
-          />
-          <VersionRow
-            label={t('updates.localOutcome')}
-            value={
-              operation.local_outcome
-                ? t(`updates.outcome.${operation.local_outcome}` as MessageKey)
-                : t('updates.outcome.pending')
-            }
-          />
-          <VersionRow
-            label={t('updates.observedVersion')}
-            value={operation.observed_version}
-            empty={t('updates.unknownValue')}
-          />
-          <VersionRow
-            label={t('updates.requestedBy')}
-            value={operation.actor_display_snapshot}
-          />
-        </dl>
-        <div className="flex flex-col gap-1 text-body-sm text-muted-foreground">
+        {operation.local_completed_at && (
           <p>
-            {t('updates.requestedAt', {
-              date: formatDate(operation.requested_at, language) ?? '—',
+            {t('updates.localCompletedAt', {
+              date: formatDate(operation.local_completed_at, language) ?? '—',
             })}
           </p>
-          {operation.local_completed_at && (
-            <p>
-              {t('updates.localCompletedAt', {
-                date: formatDate(operation.local_completed_at, language) ?? '—',
-              })}
-            </p>
-          )}
-          {operation.confirmed_at && (
-            <p>
-              {t('updates.confirmedAt', {
-                date: formatDate(operation.confirmed_at, language) ?? '—',
-              })}
-            </p>
-          )}
+        )}
+        {operation.confirmed_at && (
           <p>
-            {operation.last_contact_at
-              ? t('updates.lastContactAt', {
-                  date: formatDate(operation.last_contact_at, language) ?? '—',
-                })
-              : t('updates.contactUnknown')}
-          </p>
-        </div>
-        {operation.phase === 'awaiting_confirmation' && (
-          <p className="text-body-sm">
-            {t('updates.awaitingRemoteConfirmation')}
+            {t('updates.confirmedAt', {
+              date: formatDate(operation.confirmed_at, language) ?? '—',
+            })}
           </p>
         )}
-        {operation.phase === 'needs_intervention' && (
-          <p className="text-body-sm">{t('updates.interventionNextStep')}</p>
-        )}
-        {operation.error_code && (
-          <p className="text-body-sm">{t(errorKeys[operation.error_code])}</p>
-        )}
-      </article>
-    </>
+        <p>
+          {operation.last_contact_at
+            ? t('updates.lastContactAt', {
+                date: formatDate(operation.last_contact_at, language) ?? '—',
+              })
+            : t('updates.contactUnknown')}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function HistoryItem({
+  operation,
+  language,
+  t,
+}: {
+  operation: UpdateOperationView
+  language: string
+  t: (key: MessageKey, variables?: Record<string, string | number>) => string
+}) {
+  return (
+    <li
+      className="flex flex-col gap-1 border-b border-border py-2 text-body-sm sm:flex-row sm:justify-between sm:gap-4"
+      data-testid="agent-update-history-item"
+    >
+      <span>
+        {formatDate(operation.requested_at, language) ?? '—'} ·{' '}
+        {operation.previous_version ?? t('updates.unknownValue')} →{' '}
+        {operation.target_version} · {operation.actor_display_snapshot}
+      </span>
+      <span>{t(phaseKeys[operation.phase])}</span>
+    </li>
   )
 }
 
@@ -227,6 +223,17 @@ function AgentUpdateSection({ agent }: { agent: AgentDetail }) {
     updates.operation.data ?? updates.history.data?.data[0]
   const refreshing =
     updates.availability.isFetching || updates.history.isFetching
+  const activeOperation =
+    currentOperation && ACTIVE_PHASES.includes(currentOperation.phase)
+      ? currentOperation
+      : null
+  const status = activeOperation
+    ? t(phaseKeys[activeOperation.phase])
+    : availability
+      ? availability.availability === 'available'
+        ? t(readinessKeys[availability.device_readiness])
+        : t(availabilityKeys[availability.availability])
+      : t('updates.loading')
 
   useEffect(() => {
     const results = [
@@ -299,18 +306,14 @@ function AgentUpdateSection({ agent }: { agent: AgentDetail }) {
             className="group flex w-full cursor-pointer items-center justify-between px-6 py-4 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             data-testid="agent-update-toggle"
           >
-            <span className="flex min-w-0 items-center gap-3">
+            <span className="flex min-w-0 flex-wrap items-baseline gap-3">
               <h2 className="text-title-sm">{t('updates.title')}</h2>
               {availability?.availability === 'available' && (
                 <span
-                  data-testid="agent-update-available-badge"
-                  className="inline-flex shrink-0 items-center gap-2 rounded-full bg-primary/15 px-3 py-1 text-caption-sm font-medium text-primary"
+                  data-testid="agent-update-available-note"
+                  className="text-body-sm text-muted-foreground"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="size-2 rounded-full bg-primary"
-                  />
-                  {t('updates.availableBadge')}
+                  {t('updates.availability.available')}
                 </span>
               )}
             </span>
@@ -325,23 +328,16 @@ function AgentUpdateSection({ agent }: { agent: AgentDetail }) {
             data-testid="agent-update-content"
             className="flex flex-col gap-6 data-[state=closed]:hidden"
           >
+            {activeOperation && (
+              <p role="status" aria-live="polite" className="sr-only">
+                {status}
+              </p>
+            )}
             <dl className="flex flex-col gap-3">
               <VersionRow
                 label={t('updates.installedVersion')}
                 value={installedVersion}
                 empty={t('updates.unknownValue')}
-              />
-              <VersionRow
-                label={t('updates.installedPackageVersion')}
-                value={agent.observed_package_version}
-                empty={t('updates.unknownValue')}
-              />
-              <VersionRow
-                label={t('updates.versionObservedAt')}
-                value={
-                  formatDate(agent.version_observed_at ?? null, language) ??
-                  t('updates.unknownValue')
-                }
               />
               <VersionRow
                 label={t('updates.availableVersion')}
@@ -352,51 +348,30 @@ function AgentUpdateSection({ agent }: { agent: AgentDetail }) {
                     : t('updates.loading')
                 }
               />
-              <VersionRow
-                label={t('updates.availablePackageVersion')}
-                value={release?.package_version ?? null}
-                empty={
-                  availability
-                    ? t('updates.unknownValue')
-                    : t('updates.loading')
-                }
-              />
-              {availability && (
-                <VersionRow
-                  label={t('updates.availability')}
-                  value={t(availabilityKeys[availability.availability])}
-                />
-              )}
-              {availability && (
-                <VersionRow
-                  label={t('updates.readiness')}
-                  value={t(readinessKeys[availability.device_readiness])}
-                />
-              )}
-              {availability && (
-                <VersionRow
-                  label={t('updates.catalogueCheckedAt')}
-                  value={
-                    formatDate(availability.catalogue_checked_at, language) ??
-                    t('updates.unknownValue')
-                  }
-                />
-              )}
+              <VersionRow label={t('updates.status')} value={status} />
             </dl>
-
-            {release && (
-              <div className="flex flex-col gap-2">
-                <h3 className="text-title-sm">{t('updates.releaseNotes')}</h3>
-                <p className="max-w-prose whitespace-pre-wrap break-words text-body-md">
-                  {release.release_notes}
-                </p>
+            {(agent.revoked_at !== null ||
+              availability?.device_readiness === 'offline' ||
+              currentOperation?.phase === 'awaiting_confirmation' ||
+              currentOperation?.phase === 'needs_intervention' ||
+              currentOperation?.error_code) && (
+              <div className="flex flex-col gap-1 text-body-sm">
+                {agent.revoked_at !== null && (
+                  <p>{t('updates.revokedReadOnly')}</p>
+                )}
+                {availability?.device_readiness === 'offline' && (
+                  <p>{t('updates.offlineNotQueued')}</p>
+                )}
+                {currentOperation?.phase === 'awaiting_confirmation' && (
+                  <p>{t('updates.awaitingRemoteConfirmation')}</p>
+                )}
+                {currentOperation?.phase === 'needs_intervention' && (
+                  <p>{t('updates.interventionNextStep')}</p>
+                )}
+                {currentOperation?.error_code && (
+                  <p>{t(errorKeys[currentOperation.error_code])}</p>
+                )}
               </div>
-            )}
-            {agent.revoked_at !== null && (
-              <p className="text-body-sm">{t('updates.revokedReadOnly')}</p>
-            )}
-            {availability?.device_readiness === 'offline' && (
-              <p className="text-body-sm">{t('updates.offlineNotQueued')}</p>
             )}
             <div className="flex flex-wrap gap-2">
               {canRequest && release && (
@@ -405,7 +380,7 @@ function AgentUpdateSection({ agent }: { agent: AgentDetail }) {
                   onClick={() => setDialogOpen(true)}
                   data-testid="agent-update-trigger"
                 >
-                  {t('updates.updateDevice')}
+                  {t('updates.updateTo', { version: release.upstream_version })}
                 </Button>
               )}
               <Button
@@ -419,29 +394,83 @@ function AgentUpdateSection({ agent }: { agent: AgentDetail }) {
                   : t('updates.refreshStatus')}
               </Button>
             </div>
-            {currentOperation && (
-              <OperationDetails
-                operation={currentOperation}
-                language={language}
-                t={t}
-                live
-              />
-            )}
+            <div className="flex flex-col gap-3">
+              {release && (
+                <Disclosure
+                  label={t('updates.whatsNew', {
+                    version: release.upstream_version,
+                  })}
+                  testId="agent-update-whats-new"
+                  caretTestId="agent-update-whats-new-caret"
+                >
+                  <p className="max-w-prose whitespace-pre-wrap break-words text-body-md">
+                    {release.release_notes}
+                  </p>
+                </Disclosure>
+              )}
+              <Disclosure
+                label={t('updates.technicalDetails')}
+                testId="agent-update-technical-details"
+                caretTestId="agent-update-technical-details-caret"
+              >
+                <div className="flex w-full flex-col gap-4">
+                  <dl className="flex flex-col gap-2">
+                    <VersionRow
+                      label={t('updates.installedPackageVersion')}
+                      value={agent.observed_package_version}
+                      empty={t('updates.unknownValue')}
+                    />
+                    <VersionRow
+                      label={t('updates.availablePackageVersion')}
+                      value={release?.package_version ?? null}
+                      empty={t('updates.unknownValue')}
+                    />
+                    <VersionRow
+                      label={t('updates.versionObservedAt')}
+                      value={
+                        formatDate(
+                          agent.version_observed_at ?? null,
+                          language,
+                        ) ?? t('updates.unknownValue')
+                      }
+                    />
+                    <VersionRow
+                      label={t('updates.catalogueCheckedAt')}
+                      value={
+                        formatDate(
+                          availability?.catalogue_checked_at ?? null,
+                          language,
+                        ) ?? t('updates.unknownValue')
+                      }
+                    />
+                  </dl>
+                  {currentOperation && (
+                    <OperationDetails
+                      operation={currentOperation}
+                      language={language}
+                      t={t}
+                    />
+                  )}
+                </div>
+              </Disclosure>
+            </div>
             {updates.history.data?.data.length ? (
-              <div
-                className="flex flex-col gap-4"
+              <section
+                className="flex flex-col gap-2"
                 aria-label={t('updates.history')}
               >
                 <h3 className="text-title-sm">{t('updates.history')}</h3>
-                {updates.history.data.data.map((item) => (
-                  <OperationDetails
-                    key={item.update_id}
-                    operation={item}
-                    language={language}
-                    t={t}
-                  />
-                ))}
-              </div>
+                <ul className="flex flex-col">
+                  {updates.history.data.data.map((item) => (
+                    <HistoryItem
+                      key={item.update_id}
+                      operation={item}
+                      language={language}
+                      t={t}
+                    />
+                  ))}
+                </ul>
+              </section>
             ) : !updates.history.isLoading && !updates.history.isError ? (
               <p className="text-body-sm text-muted-foreground">
                 {t('updates.noHistory')}
