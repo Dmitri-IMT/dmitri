@@ -29,14 +29,26 @@ _SECURITY_POLICIES = {
 
 
 async def inventory_opcua_service(
-    client: OpcUaClient, host: str, port: int
+    client: OpcUaClient,
+    host: str,
+    port: int,
+    *,
+    request_budget: int = 32,
+    timeout: float = 2.0,
+    pacing_ms: int = 100,
 ) -> OpcUaInventory:
     """Inspect a discovered IPv4 TCP service; announcements are observations only."""
     ip = ipaddress.IPv4Address(host)
     if not 1 <= port <= 65535:
         raise ValueError("invalid OPC UA port")
     observed_at = datetime.now(timezone.utc)
-    result = await client.discover_endpoints(str(ip), port)
+    result = await client.discover_endpoints(
+        str(ip),
+        port,
+        request_budget=request_budget,
+        timeout=timeout,
+        pacing_ms=pacing_ms,
+    )
     return inventory_from_result(str(ip), port, result, observed_at=observed_at)
 
 
@@ -64,6 +76,10 @@ def inventory_from_result(
             when,
             reason_code=reason,
             reason_codes=(reason,),
+            client_endpoints=(),
+            requests_sent=result.stats.requests_total,
+            request_count_known=result.request_count_known,
+            write_requests_sent=result.stats.write_requests_sent,
         )
 
     endpoints: list[OpcUaInventoryEndpoint] = []
@@ -111,15 +127,21 @@ def inventory_from_result(
         when,
         endpoints=tuple(endpoints),
         identity={
-            "application_uri": sanitize_identity(result.endpoints[0].application_uri)
-            if result.endpoints
-            else None,
-            "product_uri": sanitize_identity(result.endpoints[0].product_uri)
-            if result.endpoints
-            else None,
-            "application_name": sanitize_identity(result.endpoints[0].application_name)
-            if result.endpoints
-            else None,
+            "application_uri": (
+                sanitize_identity(result.endpoints[0].application_uri)
+                if result.endpoints
+                else None
+            ),
+            "product_uri": (
+                sanitize_identity(result.endpoints[0].product_uri)
+                if result.endpoints
+                else None
+            ),
+            "application_name": (
+                sanitize_identity(result.endpoints[0].application_name)
+                if result.endpoints
+                else None
+            ),
             "application_type": (
                 result.endpoints[0].application_type
                 if result.endpoints
@@ -135,26 +157,25 @@ def inventory_from_result(
             in {"Server", "Client", "ClientAndServer", "DiscoveryServer"}
             else None
         ),
-        certificate_sha256=sanitize_certificate_fingerprint(
-            result.endpoints[0].certificate_sha256
-        )
-        if result.endpoints
-        else None,
+        certificate_sha256=(
+            sanitize_certificate_fingerprint(result.endpoints[0].certificate_sha256)
+            if result.endpoints
+            else None
+        ),
         reason_code=(
             "endpoint_limit"
             if truncated
-            else "endpoint_target_mismatch"
-            if rejected_endpoint_count
-            else None
+            else "endpoint_target_mismatch" if rejected_endpoint_count else None
         ),
         reason_codes=(
             ("endpoint_limit",)
             if truncated
-            else ("endpoint_target_mismatch",)
-            if rejected_endpoint_count
-            else ()
+            else ("endpoint_target_mismatch",) if rejected_endpoint_count else ()
         ),
         truncated=truncated,
+        client_endpoints=result.endpoints,
+        requests_sent=result.stats.requests_total,
+        write_requests_sent=result.stats.write_requests_sent,
     )
 
 

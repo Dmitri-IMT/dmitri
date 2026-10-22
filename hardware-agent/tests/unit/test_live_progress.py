@@ -4,7 +4,15 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from agent.normalize.contracts import HostPayload, PortPayload, ScanPayload
+from agent.normalize.contracts import (
+    HostPayload,
+    ModbusTcpServicePayload,
+    OpcUaObservationPayload,
+    OpcUaPhasePayload,
+    OpcUaTcpServicePayload,
+    PortPayload,
+    ScanPayload,
+)
 from agent.scanner.live_progress import LiveProgressReporter
 from agent.scanner.progress import ScanEvent
 
@@ -117,3 +125,83 @@ def test_payload_reconciliation_replaces_interim_counts_and_caps_progress() -> N
     assert snapshot.filtered_ports == 1
     assert snapshot.industrial_services == 0
     assert snapshot.vulnerabilities == 0
+
+
+def test_payload_reconciliation_counts_opcua_services() -> None:
+    reporter = LiveProgressReporter("nspi", lambda _: None, clock=lambda: 0.0)
+    opcua_service = OpcUaTcpServicePayload(
+        protocol="opcua_tcp",
+        port=4840,
+        confidence="confirmed",
+        observation=OpcUaObservationPayload(
+            schema_version=1,
+            inventory_phase=OpcUaPhasePayload(
+                status="completed",
+                reason_codes=[],
+                truncated=False,
+                observed_at=datetime.now(UTC),
+            ),
+            endpoints=[],
+        ),
+    )
+    payload = ScanPayload(
+        scan_id=uuid4(),
+        timestamp=datetime.now(UTC),
+        subnet="192.168.1.0/24",
+        scan_mode="nspi",
+        hosts=[
+            HostPayload(
+                ip="192.168.1.10",
+                hostname="DMITRI",
+                vendor="Unknown",
+                industrial_services=[opcua_service],
+            )
+        ],
+    )
+
+    snapshot = reporter.reconcile_payload(payload)
+
+    assert snapshot.industrial_services == 1
+
+
+def test_payload_reconciliation_counts_modbus_and_opcua_once_each() -> None:
+    reporter = LiveProgressReporter("nspi", lambda _: None, clock=lambda: 0.0)
+    opcua_service = OpcUaTcpServicePayload(
+        protocol="opcua_tcp",
+        port=4840,
+        confidence="confirmed",
+        observation=OpcUaObservationPayload(
+            schema_version=1,
+            inventory_phase=OpcUaPhasePayload(
+                status="completed",
+                reason_codes=[],
+                truncated=False,
+                observed_at=datetime.now(UTC),
+            ),
+            endpoints=[],
+        ),
+    )
+    payload = ScanPayload(
+        scan_id=uuid4(),
+        timestamp=datetime.now(UTC),
+        subnet="192.168.1.0/24",
+        scan_mode="nspi",
+        hosts=[
+            HostPayload(
+                ip="192.168.1.10",
+                hostname="PLC",
+                vendor="Unknown",
+                industrial_services=[
+                    ModbusTcpServicePayload(
+                        port=502,
+                        confidence="confirmed",
+                    ),
+                    opcua_service,
+                ],
+            )
+        ],
+    )
+
+    snapshot = reporter.reconcile_payload(payload)
+
+    assert snapshot.industrial_services == 2

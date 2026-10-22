@@ -3,7 +3,6 @@ from __future__ import annotations
 import threading
 
 import pytest
-
 from agent.ot.modbus.client import (
     ModbusClientController,
     ModbusReadSession,
@@ -212,13 +211,9 @@ def test_mapping_adapter_dispatches_all_four_typed_reads() -> None:
 
         assert result.status == "readable"
         assert result.values == (
-            [True, False]
-            if address_space in {"coil", "discrete_input"}
-            else [7, 8]
+            [True, False] if address_space in {"coil", "discrete_input"} else [7, 8]
         )
-        assert clients[-1].calls == [
-            (address_space, 10, {"count": 2, "device_id": 7})
-        ]
+        assert clients[-1].calls == [(address_space, 10, {"count": 2, "device_id": 7})]
         assert clients[-1].closed is True
 
 
@@ -244,7 +239,45 @@ def test_mapping_adapter_normalises_exception_and_returned_timeout() -> None:
     assert exception.status == "illegal_address"
     assert exception.exception_code == 2
     assert timeout.status == "timeout"
-    assert timeout.request_sent is True
+    assert timeout.request_sent is False
+
+
+@pytest.mark.parametrize(
+    "address_space",
+    ["coil", "discrete_input", "holding_register", "input_register"],
+)
+@pytest.mark.parametrize(
+    ("sent_bytes", "expected_request_sent"), [(1, True), (0, False)]
+)
+def test_mapping_request_sent_tracks_fc01_to_fc04_transport_bytes(
+    address_space, sent_bytes, expected_request_sent
+) -> None:
+    class TransportReadClient(_ReadClient):
+        def __init__(self):
+            super().__init__(_ReadResponse(bits=[True], registers=[7]))
+            self.send_calls = 0
+
+        def send(self, request):
+            del request
+            self.send_calls += 1
+            return sent_bytes
+
+        def _read(self, name, address, **kwargs):
+            self.calls.append((name, address, kwargs))
+            self.send(b"read request")
+            return self.response
+
+    client = TransportReadClient()
+    with ModbusReadSession(
+        "192.168.10.30",
+        502,
+        timeout=1.0,
+        client_factory=lambda *args, **kwargs: client,
+    ) as session:
+        result = session.read(address_space, 0, 1, 1)
+
+    assert result.request_sent is expected_request_sent
+    assert client.send_calls == 1
 
 
 def test_cancellation_closes_an_active_client() -> None:

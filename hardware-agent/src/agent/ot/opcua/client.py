@@ -3,9 +3,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
-import os
 import sys
-from pathlib import Path
 from typing import Any
 
 from .models import (
@@ -42,6 +40,7 @@ class OpcUaClient:
         *,
         request_budget: int = MAX_REQUEST_BUDGET,
         timeout: float = MAX_OPERATION_TIMEOUT_SECONDS,
+        pacing_ms: int = 100,
     ) -> OpcUaClientResult:
         try:
             target = ipaddress.IPv4Address(host)
@@ -56,6 +55,7 @@ class OpcUaClient:
             port,
             request_budget=request_budget,
             timeout=timeout,
+            pacing_ms=pacing_ms,
         )
 
     async def probe_read_only_services(
@@ -80,6 +80,7 @@ class OpcUaClient:
             port,
             request_budget=request_budget,
             timeout=timeout,
+            overall_timeout=10.0,
         )
 
     async def map_anonymous(
@@ -91,6 +92,7 @@ class OpcUaClient:
         request_budget: int = MAX_REQUEST_BUDGET,
         timeout: float = MAX_OPERATION_TIMEOUT_SECONDS,
         deadline: float = 90.0,
+        pacing_ms: int = 100,
     ) -> OpcUaClientResult:
         """Map one explicitly anonymous None endpoint in the helper process."""
         try:
@@ -116,6 +118,7 @@ class OpcUaClient:
             request_budget=budget,
             timeout=timeout_ms / 1000,
             overall_timeout=min(max(float(deadline), 0.1), 90.0),
+            pacing_ms=pacing_ms,
             endpoint_url=endpoint.endpoint_url,
         )
 
@@ -129,6 +132,7 @@ class OpcUaClient:
         timeout: float,
         endpoint_url: str | None = None,
         overall_timeout: float | None = None,
+        pacing_ms: int = 100,
     ) -> OpcUaClientResult:
 
         budget = min(max(int(request_budget), 1), MAX_REQUEST_BUDGET)
@@ -140,6 +144,7 @@ class OpcUaClient:
                 "port": port,
                 "request_budget": budget,
                 "timeout_ms": timeout_ms,
+                "pacing_ms": min(max(int(pacing_ms), 100), 2000),
                 "deadline_ms": min(
                     max(
                         int((overall_timeout or (timeout_ms / 1000)) * 1000),
@@ -163,15 +168,20 @@ class OpcUaClient:
             return OpcUaClientResult("error", error="helper_unavailable")
 
         try:
-            stdout, _ = await asyncio.wait_for(
-                process.communicate(request),
+            assert process.stdin is not None and process.stdout is not None
+            process.stdin.write(request)
+            await process.stdin.drain()
+            process.stdin.close()
+            stdout = await asyncio.wait_for(
+                _finish_worker(process, process.stdout),
                 timeout=(
                     overall_timeout
                     if overall_timeout is not None
-                    else timeout_ms / 1000
-                )
-                + 1.0,
+                    else timeout_ms / 1000 + 4.0
+                ),
             )
+            if len(stdout) > 128 * 1024:
+                return OpcUaClientResult("error", error="invalid_response")
         except (asyncio.TimeoutError, asyncio.CancelledError):
             try:
                 process.kill()
@@ -180,7 +190,9 @@ class OpcUaClient:
             await process.wait()
             if isinstance(sys.exc_info()[1], asyncio.CancelledError):
                 raise
-            return OpcUaClientResult("error", error="timeout")
+            return OpcUaClientResult(
+                "error", error="timeout", request_count_known=False
+            )
 
         try:
             response = json.loads(stdout)
@@ -191,6 +203,15 @@ class OpcUaClient:
                         "ok",
                         mapping=_parse_mapping(response.get("mapping")),
                         stats=stats,
+                        request_count_known=response.get("request_count_known")
+                        is not False,
+                    )
+                if operation == "probe_read_only":
+                    return OpcUaClientResult(
+                        "ok",
+                        stats=stats,
+                        request_count_known=response.get("request_count_known")
+                        is not False,
                     )
                 endpoints = tuple(
                     _parse_endpoint(item) for item in response["endpoints"]
@@ -203,39 +224,50 @@ class OpcUaClient:
                     endpoints=endpoints,
                     endpoints_truncated=endpoints_truncated,
                     stats=stats,
+                    request_count_known=response.get("request_count_known")
+                    is not False,
                 )
             error = response.get("code")
             if error not in _ERRORS:
                 error = "service_error"
-            return OpcUaClientResult("error", error=error, stats=stats)
+            return OpcUaClientResult(
+                "error",
+                error=error,
+                stats=stats,
+                request_count_known=response.get("request_count_known") is not False,
+            )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             return OpcUaClientResult("error", error="invalid_response")
 
 
 def _helper_command() -> list[str]:
-    configured = os.environ.get("DMITRI_OPCUA_BRIDGE")
-    if configured:
-        return [configured]
-    root = Path(__file__).with_name("helper")
-    rid = "win-x64" if sys.platform == "win32" else "linux-arm64"
-    published = (
-        root
-        / "publish"
-        / rid
-        / ("opcua-bridge.exe" if sys.platform == "win32" else "opcua-bridge")
-    )
-    if published.is_file():
-        return [str(published)]
-    dll = root / "bin" / "Release" / "net10.0" / "opcua-bridge.dll"
-    if not dll.is_file():
-        dll = root / "bin" / "Debug" / "net10.0" / "opcua-bridge.dll"
-    dotnet = os.environ.get("DOTNET_HOST_PATH", "dotnet")
-    if dll.is_file():
-        return [dotnet, str(dll)]
-    project = root / "opcua-bridge.csproj"
-    if project.is_file():
-        return [dotnet, "run", "--no-build", "--project", str(project)]
-    raise RuntimeError("OPC UA helper is not installed")
+    return [sys.executable, "-m", "agent.ot.opcua.worker"]
+
+
+async def _read_bounded(stream: asyncio.StreamReader, limit: int) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await stream.read(min(8192, limit + 1 - total))
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
+        total += len(chunk)
+        if total > limit:
+            return b"".join(chunks)
+
+
+async def _finish_worker(
+    process: asyncio.subprocess.Process, stream: asyncio.StreamReader
+) -> bytes:
+    output = await _read_bounded(stream, 128 * 1024)
+    if len(output) > 128 * 1024:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+    await process.wait()
+    return output
 
 
 def _parse_stats(response: dict[str, Any]) -> OpcUaRequestStats:
@@ -257,6 +289,9 @@ def _parse_stats(response: dict[str, Any]) -> OpcUaRequestStats:
         requests_total=min(
             max(int(response.get("requests_total", 0)), 0), MAX_REQUEST_BUDGET
         ),
+        write_requests_sent=min(
+            max(int(response.get("write_requests_sent", 0)), 0), MAX_REQUEST_BUDGET
+        ),
         bytes_sent=min(max(int(response.get("bytes_sent", 0)), 0), 4 * 1024 * 1024),
         bytes_received=min(
             max(int(response.get("bytes_received", 0)), 0), 4 * 1024 * 1024
@@ -275,14 +310,16 @@ def _parse_endpoint(value: Any) -> OpcUaEndpoint:
         transport_profile_uri=_safe_text(value.get("transport_profile"), 128),
         security_level=min(max(int(value.get("security_level", 0)), 0), 255),
         user_token_count=min(max(int(value.get("user_token_count", 0)), 0), 8),
-        user_token_types=tuple(
-            text
-            for item in value.get("user_token_types", [])[:8]
-            if (text := _safe_text(item, 32))
-            in {"Anonymous", "UserName", "Certificate", "IssuedToken"}
-        )
-        if isinstance(value.get("user_token_types", []), list)
-        else (),
+        user_token_types=(
+            tuple(
+                text
+                for item in value.get("user_token_types", [])[:8]
+                if (text := _safe_text(item, 32))
+                in {"Anonymous", "UserName", "Certificate", "IssuedToken"}
+            )
+            if isinstance(value.get("user_token_types", []), list)
+            else ()
+        ),
         application_uri=_safe_optional(value.get("application_uri"), 128),
         product_uri=_safe_optional(value.get("product_uri"), 128),
         application_name=_safe_optional(value.get("application_name"), 128),
@@ -364,19 +401,27 @@ def _parse_mapping(value: Any) -> OpcUaMappingResult:
                 browse_name=_safe_optional(item.get("browse_name"), 128),
                 display_name=_safe_optional(item.get("display_name"), 128),
                 data_type=_safe_optional(item.get("data_type"), 256),
-                value_rank=min(max(int(item["value_rank"]), -(2**31)), 2**31 - 1)
-                if isinstance(item.get("value_rank"), int)
-                else None,
-                access_level=min(max(int(item["access_level"]), 0), 255)
-                if isinstance(item.get("access_level"), int)
-                else None,
-                user_access_level=min(max(int(item["user_access_level"]), 0), 255)
-                if isinstance(item.get("user_access_level"), int)
-                else None,
-                value_read_status=item.get("value_read_status")
-                if item.get("value_read_status")
-                in {"Good", "Denied", "Error", "Skipped"}
-                else None,
+                value_rank=(
+                    min(max(int(item["value_rank"]), -(2**31)), 2**31 - 1)
+                    if isinstance(item.get("value_rank"), int)
+                    else None
+                ),
+                access_level=(
+                    min(max(int(item["access_level"]), 0), 255)
+                    if isinstance(item.get("access_level"), int)
+                    else None
+                ),
+                user_access_level=(
+                    min(max(int(item["user_access_level"]), 0), 255)
+                    if isinstance(item.get("user_access_level"), int)
+                    else None
+                ),
+                value_read_status=(
+                    item.get("value_read_status")
+                    if item.get("value_read_status")
+                    in {"Good", "Denied", "Error", "Skipped"}
+                    else None
+                ),
             )
         )
     raw_references = value.get("references", [])
@@ -405,15 +450,21 @@ def _parse_mapping(value: Any) -> OpcUaMappingResult:
             if isinstance(value.get("selected_endpoint_index"), int)
             else None
         ),
-        anonymous_session_activated=value.get("anonymous_session_activated")
-        if isinstance(value.get("anonymous_session_activated"), bool)
-        else None,
-        browse_succeeded=value.get("browse_succeeded")
-        if isinstance(value.get("browse_succeeded"), bool)
-        else None,
-        application_value_read_succeeded=value.get("application_value_read_succeeded")
-        if isinstance(value.get("application_value_read_succeeded"), bool)
-        else None,
+        anonymous_session_activated=(
+            value.get("anonymous_session_activated")
+            if isinstance(value.get("anonymous_session_activated"), bool)
+            else None
+        ),
+        browse_succeeded=(
+            value.get("browse_succeeded")
+            if isinstance(value.get("browse_succeeded"), bool)
+            else None
+        ),
+        application_value_read_succeeded=(
+            value.get("application_value_read_succeeded")
+            if isinstance(value.get("application_value_read_succeeded"), bool)
+            else None
+        ),
         value_good_count=min(max(int(value.get("value_good_count", 0)), 0), 8),
         security_mode=_parse_security_fact(value.get("security_mode")),
         security_policy=_parse_security_fact(value.get("security_policy")),

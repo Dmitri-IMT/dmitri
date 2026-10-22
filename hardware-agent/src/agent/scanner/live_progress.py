@@ -115,7 +115,11 @@ class LiveProgressReporter(ScanReporter):
                 for port in host.ports
             ),
             industrial_services=sum(
-                len(host.industrial_services) for host in payload.hosts
+                sum(
+                    service.protocol in {"modbus_tcp", "opcua_tcp"}
+                    for service in host.industrial_services
+                )
+                for host in payload.hosts
             ),
             vulnerabilities=len(payload.findings),
             revision=self._snapshot.revision + 1,
@@ -141,9 +145,15 @@ def _stage_for(kind: str, previous: ProgressStage, scan_mode: str) -> ProgressSt
         return (
             "targeted_assessment"
             if scan_mode in TARGETED_MODES and scan_mode != "nspi"
-            else "ot_inspection" if scan_mode == "nspi" else "normalization"
+            else "ot_inspection"
+            if scan_mode == "nspi"
+            else "normalization"
         )
-    if kind in {"ot_stage_started", "modbus_host_inspected"}:
+    if kind in {
+        "ot_stage_started",
+        "modbus_host_inspected",
+        "industrial_host_inspected",
+    }:
         return "ot_inspection"
     if kind == "ot_stage_done":
         return "targeted_assessment" if scan_mode == "nspi" else "normalization"

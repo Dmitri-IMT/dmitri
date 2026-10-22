@@ -163,6 +163,7 @@ name = "hardware-agent"
 version = "1.0.7"
 source = { editable = "." }
 dependencies = [
+    { name = "asyncua" },
     { name = "cryptography" },
     { name = "httpx" },
     { name = "psutil" },
@@ -175,7 +176,6 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
-    { name = "asyncua" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pyyaml" },
@@ -184,8 +184,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "asyncua", marker = "extra == 'dev'", specifier = "==2.1.0" },
-    { name = "cryptography", specifier = ">=42.0" },
+    { name = "asyncua", specifier = "==2.1.0" },
+    { name = "cryptography", specifier = ">=45.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "psutil", specifier = ">=7.0.0" },
     { name = "pydantic", specifier = ">=2.6.0" },

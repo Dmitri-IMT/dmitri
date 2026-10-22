@@ -1,7 +1,36 @@
 # Plano de execução — OPC UA no NSPi
 
-Status: Task 1 complete and reviewer-approved. Tasks 2–9 remain pending user command.
+Status: Tasks 1–4, M1 and M2 complete and reviewer-approved. Python migration is complete.
+The latest user instruction requires a new command before starting Task 5.
+Sequence is M1 → M2 → user command → 5 → 6 → 7 → 8 → 9.
+Completed task numbers and review history are retained.
 Branch/base: `feature/nspi-scan-opcua`, `971ba8d`.
+
+## Active Python migration
+
+`PYTHON_MIGRATION.md` governs M1/M2 and supersedes the .NET SDK choice and stale
+approval/status text in the historical planning record below. Use pinned runtime
+`asyncua==2.1.0` in an isolated Python subprocess, worker-only bounded decoder
+patches and a raw socket writer with actual-send accounting. Preserve all Task 1–4
+security/functionality and the current uncommitted Task 4 changes.
+
+| Task | Deliverable | Dependency | Gate |
+|---|---|---|---|
+| M1 | Stable decoder/transport guards and worker GetEndpoints, tested directly | Task 4 history | Real pinned decoder pre-allocation paths, HEL/ACK, allowlist, actual sends, budgets, pacing, cancellation and fixture isolation |
+| M2 | Port complete anonymous mapping, switch facade to Python, remove .NET sources/build/test paths | M1 | Full existing client/mapping/stage parity, wire observations, metadata-only output, DMITRI identity and Modbus regression |
+| 5 | Existing backend persistence/ingest/read scope | M2 | Live `dmitri_test`, migrations, compatibility, idempotence and org isolation |
+
+Exact target files and acceptance criteria are in `TASKS.md`. No throwaway client
+or temporary .NET fallback. Task 9 retains Linux ARM64/offline package validation;
+runtime pin/lock and .NET removal belong to migration now. Each migration unit uses
+Python coder/test engineer and critical transport reviewer under the existing
+sequential harness. M1/M2 review gates passed; Task 5 waits for a new user command.
+
+## Historical planning record
+
+The remaining sections record the original nine-task planning and SDK assessment.
+Their .NET implementation choice, "pending user command" statements and Task 1
+preparation instructions are superseded by the active migration above.
 
 ## Resultado e decisões propostas
 

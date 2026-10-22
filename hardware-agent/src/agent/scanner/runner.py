@@ -42,7 +42,11 @@ from agent.scanner.stages import OtInspectionResult
 from agent.targeted.executor import TargetedExecutor
 from agent.targeted.models import TargetedStageSummary
 from agent.targeted.stage import run_targeted_stage
-from agent.utils.network import LocalNetworkInfo, check_network_connectivity
+from agent.utils.network import (
+    LocalNetworkInfo,
+    check_network_connectivity,
+    detect_local_network,
+)
 
 
 class ScanRunner:
@@ -156,6 +160,7 @@ class ScanRunner:
         hosts_payload = [
             stages.build_host_payload(
                 host,
+                agent_ip=network_info.ip,
                 machine_type=assessment.machine_types[host.ip],
                 device_profile=assessment.device_profiles[host.ip],
             )
@@ -265,12 +270,7 @@ class ScanRunner:
                 min_cvss=min_cvss_for_mode(self.scan_mode),
                 nspi_submode=self.nspi_submode,
             )
-            network_info = LocalNetworkInfo(
-                ip="0.0.0.0",
-                netmask="255.255.255.0",
-                subnet=self.subnet,
-                interface="tui",
-            )
+            network_info = detect_local_network()
             runner = build_runner(
                 settings,
                 self._workspace_root,
@@ -546,6 +546,26 @@ def _record_not_run(
                 and has_modbus_candidate(host)
             ):
                 pending.append("ot_inspection")
+            if (
+                ot
+                and reached < _STAGE_ORDER.index("ot_inspection")
+                and any(
+                    port.protocol.lower() == "tcp"
+                    and (port.port == 4840 or "opcua" in port.service.name.lower()
+                         or "opcuatcp" in port.service.name.lower())
+                    for port in host.open_ports
+                )
+            ):
+                host.stage_coverage.extend(
+                    StageCoverage(
+                        "ot_inspection", "skipped", "opcua_inspection", reason,
+                        port.port, "tcp", "opcua"
+                    )
+                    for port in host.open_ports
+                    if port.protocol.lower() == "tcp"
+                    and (port.port == 4840 or "opcua" in port.service.name.lower()
+                         or "opcuatcp" in port.service.name.lower())
+                )
             if targeted and reached < _STAGE_ORDER.index("targeted_assessment"):
                 pending.append("targeted_assessment")
         host.stage_coverage.extend(

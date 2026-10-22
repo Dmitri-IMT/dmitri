@@ -3823,7 +3823,7 @@ components:
         reason_codes:
           type: array
           maxItems: 16
-          items: {type: string, enum: [timeout, endpoint_discovery_failed, endpoint_target_mismatch, endpoint_limit, message_size_limit, request_budget_exhausted, service_not_allowed, service_error, invalid_response, helper_unavailable, cancelled, host_deadline, stage_deadline, global_deadline, decode_limit, byte_limit, opaque_node_id_omitted, observation_size_limit, decode_error, authentication_required, anonymous_denied, security_configuration_required, external_reference, page_limit, node_limit, depth_limit, no_eligible_variables]}
+          items: {type: string, enum: [timeout, endpoint_discovery_failed, endpoint_target_mismatch, endpoint_limit, message_size_limit, request_budget_exhausted, service_not_allowed, service_error, invalid_response, helper_unavailable, cancelled, host_deadline, stage_deadline, global_deadline, decode_limit, byte_limit, opaque_node_id_omitted, observation_size_limit, decode_error, authentication_required, anonymous_denied, security_configuration_required, external_reference, page_limit, node_limit, depth_limit, no_eligible_variables, service_limit]}
         truncated: {type: boolean}
         observed_at: {type: string, format: date-time}
     OpcUaObservationPayload:

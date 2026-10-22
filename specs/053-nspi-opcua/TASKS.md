@@ -1,6 +1,12 @@
 # Tasks — OPC UA integrado ao NSPi (`053-nspi-opcua`)
 
-9 sequential tasks. **Task 1 is complete and reviewer-approved.** Specs approved 2026-10-20. Base: `feature/nspi-scan-opcua` / `971ba8d`.
+11 sequential implementation units: original Tasks 1–9 plus migration M1/M2.
+**Tasks 1–4, M1 and M2 are complete and reviewed.** User authorized replacing
+the C#/.NET helper entirely with Python. Latest scheduling instruction: finish the
+migration, then stop. **Task 5 requires a new explicit user command.**
+Specs originally approved 2026-10-20. Base: `feature/nspi-scan-opcua` / `971ba8d`.
+Original completed entries and review history below remain unchanged. Their .NET
+targets describe the old implementation; active migration targets supersede them.
 
 Cada tarefa segue coder Luna medium → test engineer Luna medium → reviewer Sol 6.1; Task 1 requer reviewer Sol 6.1 high. Só o reviewer registra aprovação. Nenhum commit, push, PR, publicação ou deploy está incluído.
 
@@ -40,17 +46,19 @@ Cada tarefa segue coder Luna medium → test engineer Luna medium → reviewer S
 - **Review Rejections**: 3
 
 ## Task 4: Integrar protocolos no estágio industrial e nos chamadores
+
+- **User-added acceptance criterion**: identify the agent's own discovered host as `DMITRI` in scan output and reports that consume the host name. Determine self identity by matching the host IP to the agent's detected local scan IP; do not rename other hosts or change the `machine_type` taxonomy. Added at the user's request before implementation.
 - **Description**: Integrar inventário e mapping UA ao estágio NSPi compartilhado, preservando Modbus, limites, progresso e cancelamento. Ajustar apenas compatibilidade mínima da TUI; o front continua interface principal. Governam A01, A10–A11, A15.
 - **Dependencies**: Task 3
-- **Target Files**: `hardware-agent/src/agent/ot/policy.py`, `hardware-agent/src/agent/ot/modbus/client.py`, `hardware-agent/src/agent/ot/modbus/inventory.py`, `hardware-agent/src/agent/ot/modbus/mapper.py`, `hardware-agent/src/agent/scanner/runner.py`, `hardware-agent/src/agent/scanner/stages.py`, `hardware-agent/src/agent/scanner/models.py`, `hardware-agent/src/agent/scanner/progress.py`, `hardware-agent/src/agent/scanner/live_progress.py`, `hardware-agent/src/agent/daemon.py`, `hardware-agent/src/agent/normalize/coverage.py`, `hardware-agent/src/agent/tui/screens/device_detail.py`, `hardware-agent/src/agent/tui/screens/scan_progress.py`, `hardware-agent/src/agent/tui/screens/scan_view.py`, `hardware-agent/src/agent/tui/screens/home.py`
+- **Target Files**: `hardware-agent/src/agent/ot/policy.py`, `hardware-agent/src/agent/ot/modbus/client.py`, `hardware-agent/src/agent/ot/modbus/inventory.py`, `hardware-agent/src/agent/ot/modbus/mapper.py`, `hardware-agent/src/agent/ot/opcua/client.py`, `hardware-agent/src/agent/ot/opcua/inventory.py`, `hardware-agent/src/agent/ot/opcua/mapper.py`, `hardware-agent/src/agent/ot/opcua/models.py`, `hardware-agent/src/agent/ot/opcua/helper/Program.cs`, `hardware-agent/src/agent/scanner/runner.py`, `hardware-agent/src/agent/scanner/stages.py`, `hardware-agent/src/agent/scanner/models.py`, `hardware-agent/src/agent/scanner/progress.py`, `hardware-agent/src/agent/scanner/live_progress.py`, `hardware-agent/src/agent/daemon.py`, `hardware-agent/src/agent/normalize/contracts.py`, `hardware-agent/src/agent/normalize/coverage.py`, `hardware-agent/src/agent/tui/screens/device_detail.py`, `hardware-agent/src/agent/tui/screens/scan_progress.py`, `hardware-agent/src/agent/tui/screens/scan_view.py`, `hardware-agent/src/agent/tui/screens/home.py`
 - **Tests**: `hardware-agent/tests/unit/test_opcua_stage.py`, `test_modbus_stage.py`, `test_scan_runner_cancel.py`, `test_scan_runner_partial.py`, `test_scan_runner_timing.py`, `test_headless.py`, `test_daemon.py`, `test_scan_progress_screen.py`, `test_tui_device_detail.py`, `test_egress_only.py`.
 - **Success Criteria**: inventory precedes mapping; OPC UA e Modbus compartilham relógio/orçamento sem sobrescrever resultados; falha isolada e `skipped` preservam cobertura; cancel funciona em CLI/headless/daemon/TUI; consumidor TUI não trata UA como Modbus nem quebra; novos contadores refletem envios reais.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETE
+- **Review Rejections**: 1
 
 ## Task 5: Persistir observações UA e manter ingest/read compatíveis
 - **Description**: Adicionar observação JSON tipada por serviço e atualização Alembic segura. Ingestão idempotente e leitura isolada por organização devem preservar scans antigos e resultados Modbus; governam A03, A11, A13–A14.
-- **Dependencies**: Tasks 1, 4
+- **Dependencies**: Tasks 1, 4 and M2 (full Python migration reviewed)
 - **Target Files**: `backend/src/api/models/persistence.py`, `backend/alembic/versions/20261020_44_opcua_observations.py`, `backend/src/api/schemas/industrial.py`, `backend/src/api/schemas/scan.py`, `backend/src/api/schemas/read.py`, `backend/src/api/routers/scans.py`, `backend/src/api/services/persistence.py`, `backend/src/api/services/industrial.py`, `backend/src/api/services/read.py`, `backend/src/api/services/deletion.py`, `contracts/openapi/openapi.yaml`
 - **Tests**: `backend/tests/test_opcua_observations_migration.py`, `test_industrial_persistence.py`, `test_industrial_observations_migration.py`, `test_ingest_scan.py`, `test_industrial_read_routes.py`, `test_contract_fidelity.py`.
 - **Success Criteria**: upgrade/downgrade preserva dados; downgrade não apaga observações UA silenciosamente; upsert `(scan_host, protocol, port)` é idempotente; JSON corrompido degrada somente observação UA; isolamento org e membro Modbus não mudam.
@@ -95,12 +103,30 @@ Cada tarefa segue coder Luna medium → test engineer Luna medium → reviewer S
 
 ---
 
+## Task M1: Implement bounded Python worker inventory and stable protocol guards
+- **Description**: Build the final decoder and socket transport primitives specified in `PYTHON_MIGRATION.md`, reuse pinned `asyncua==2.1.0`, and expose bounded GetEndpoints through the worker entry tested directly. Keep the existing facade until M2 completes mapping; no fake mapper or runtime fallback. Govern A02, A07–A10, A14, A16.
+- **Absorbed**: Runtime dependency promotion, lock and license attribution are verified through the actual worker rather than separate config-only tasks.
+- **Dependencies**: Task 4 (completed baseline)
+- **Target Files**: `hardware-agent/src/agent/ot/opcua/worker.py`, `hardware-agent/src/agent/ot/opcua/bounded_decode.py`, `hardware-agent/src/agent/ot/opcua/guarded_transport.py`, `hardware-agent/src/agent/ot/opcua/THIRD_PARTY_NOTICES.txt`, `hardware-agent/pyproject.toml`, `hardware-agent/uv.lock`, `hardware-agent/tests/unit/test_opcua_decode.py`, `hardware-agent/tests/unit/test_opcua_transport.py`, `hardware-agent/tests/unit/test_opcua_worker.py`, `hardware-agent/tests/fixtures/opcua_lab.py`.
+- **Tests**: Real pinned decoder generic/Variant arrays, byte/string/ExtensionObject lengths, recursive/cached factories and dimensions reject before allocation/element decode. Raw loopback peers prove exact HEL, ACK validation, header-only rejection, 16/17 chunks, byte totals and reset. Socket writer tests prove single admission/pacing, pre-send failure versus response timeout, partial-send unknown counts, independent one-shot cleanup reservations, direct forbidden request block, cancellation/abort and unchanged parent fixture decoder.
+- **Success Criteria**: Worker inventory returns existing sanitized bounded IPC schema; <=32 budget and >=100 ms pacing include lifecycle; only allowed exact request classes/TypeIds receive one-use send permits; counts follow actual socket-send completion; malformed/oversized data cannot reach unbounded allocation; patches exist only in worker memory; runtime pin/lock and attribution present; focused pytest/Ruff and independent critical Python review pass. No .NET implementation changes in this unit.
+- **Status**: COMPLETE
+- **Review Rejections**: 2
+
+## Task M2: Complete Python mapping, replace facade launch and remove .NET
+- **Description**: Port completed C# mapping and review fixes into `worker_mapping.py`, preserve all Task 1–4 behavior, switch the facade to Python worker, and delete C# source/projects/harness and obsolete executable/build configuration. Govern A01–A16 and Task 4 DMITRI acceptance criterion; `PYTHON_MIGRATION.md` names seams/removal paths.
+- **Dependencies**: M1
+- **Target Files**: `hardware-agent/src/agent/ot/opcua/{worker.py,worker_mapping.py,guarded_transport.py,client.py,models.py,inventory.py,mapper.py}`; remove `hardware-agent/src/agent/ot/opcua/helper/{Program.cs,opcua-bridge.csproj,LICENSE.txt,.gitignore}` and `hardware-agent/tests/dotnet/opcua-bridge.tests/{Program.cs,opcua-bridge.tests.csproj}`; `hardware-agent/tests/unit/{test_opcua_client.py,test_opcua_mapper.py,test_opcua_inventory.py,test_opcua_untrusted.py,test_opcua_worker.py,test_opcua_transport.py,test_opcua_stage.py}`, `hardware-agent/tests/fixtures/opcua_lab.py`.
+- **Tests**: Port .NET guard-harness assertions into Python; client/mapper fixtures launch Python without SDK builds/skips. Verify actual worker session/BFS/pagination/metadata/Value-status parity, cleanup cutoff/duplicates, no cleanup after cancel/deadline, secrets/process sentinels absent from output/logs/models, bounded parent stdout reads, actual peer counts/pacing and no forbidden requests. Repeat relevant stage/Modbus/runner/headless/daemon/TUI/egress/contract tests including DMITRI self-name.
+- **Success Criteria**: Python performs inventory and anonymous mapping with unchanged external contract, 32/64 shared budgets and cancellation semantics. No C# source, .NET project/build/test requirement, `DMITRI_OPCUA_BRIDGE` or DOTNET launch path remains in active production/tests; historical specs retain audit references. Parent/fixture asyncua remain unpatched; no process values/derivatives cross IPC. Focused gates and independent critical Python review pass. Audit packaging scripts/CI for .NET requirements; ARM64 offline execution remains Task 9. Task 5 requires a new user command after M2 review.
+- **Status**: COMPLETE
+- **Review Rejections**: 2
+
 ## Dependency graph
 
 ```text
-1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
-                  └─────────┘
-5 também depende de 1 e 4
+1 → 2 → 3 → 4 → M1 → M2 → 5 → 6 → 7 → 8 → 9
+Task 5 also depends on the completed Task 1 and Task 4 contracts.
 ```
 
 ## Status
@@ -110,7 +136,9 @@ Cada tarefa segue coder Luna medium → test engineer Luna medium → reviewer S
 | 1 | Cliente limitado e laboratório local | COMPLETE |
 | 2 | Inventário e contrato do agente | COMPLETE |
 | 3 | Sessão anônima e mapeamento | COMPLETE |
-| 4 | Integração do estágio e chamadores | PENDING |
+| 4 | Integração do estágio e chamadores | COMPLETE |
+| M1 | Python worker inventory, bounded decoder and transport | COMPLETE |
+| M2 | Python mapping, facade switch and .NET removal | COMPLETE |
 | 5 | Persistência, ingest e read | PENDING |
 | 6 | Interface web | PENDING |
 | 7 | Relatórios e IA | PENDING |

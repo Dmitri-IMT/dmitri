@@ -300,6 +300,7 @@ class OpcUaPhasePayload(BaseModel):
             "node_limit",
             "depth_limit",
             "no_eligible_variables",
+            "service_limit",
         ]
     ] = Field(max_length=16)
     truncated: StrictBool
@@ -497,6 +498,7 @@ class CoverageUnitPayload(BaseModel):
         "service_recovery",
         "port_discovery",
         "modbus_inspection",
+        "opcua_inspection",
         "targeted_tool",
         "targeted_tool_partial_report",
         "not_run",

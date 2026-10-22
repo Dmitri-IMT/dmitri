@@ -14,6 +14,7 @@ ScanEventKind = Literal[
     "deep_stage_done",
     "ot_stage_started",
     "modbus_host_inspected",
+    "industrial_host_inspected",
     "ot_stage_deadline",
     "ot_stage_done",
     "targeted_stage_started",
@@ -96,7 +97,7 @@ def target_pct(event: ScanEvent, weights: StageWeights) -> float | None:
         return d + p + i * fraction
     if kind in ("deep_stage_done", "ot_stage_started"):
         return d + p + i
-    if kind == "modbus_host_inspected":
+    if kind in {"modbus_host_inspected", "industrial_host_inspected"}:
         fraction = event.hosts_done / event.hosts_total if event.hosts_total else 0.0
         return d + p + i + o * fraction
     if kind == "ot_stage_done":

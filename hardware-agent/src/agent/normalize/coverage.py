@@ -22,6 +22,9 @@ def extract_coverage(hosts: Iterable[HostInfo]) -> list[CoverageUnitPayload]:
                 outcome=record.outcome,
                 reason_code=record.reason_code,
                 evidence_source=record.evidence_source,
+                port=record.port,
+                protocol=record.protocol,
+                tool=record.tool,
             )
             for record in host.stage_coverage
         )

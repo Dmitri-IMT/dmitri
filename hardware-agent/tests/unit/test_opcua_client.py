@@ -2,26 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import importlib.util
 import json
-import os
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
-from agent.ot.opcua.client import OpcUaClient, _helper_command
+from agent.ot.opcua.client import OpcUaClient
 from asyncua import ua
 
+from tests.fixtures.opcua_lab import OpcUaLabServer
+
 ROOT = Path(__file__).resolve().parents[2]
-HELPER = ROOT / "src/agent/ot/opcua/helper/opcua-bridge.csproj"
-_fixture_spec = importlib.util.spec_from_file_location(
-    "opcua_lab", ROOT / "tests/fixtures/opcua_lab.py"
-)
-assert _fixture_spec is not None and _fixture_spec.loader is not None
-_fixture_module = importlib.util.module_from_spec(_fixture_spec)
-_fixture_spec.loader.exec_module(_fixture_module)
-OpcUaLabServer = _fixture_module.OpcUaLabServer
 
 
 async def _raw_mapping_stdout(host: str, port: int) -> bytes:
@@ -36,46 +26,27 @@ async def _raw_mapping_stdout(host: str, port: int) -> bytes:
             "deadline_ms": 90000,
         },
         separators=(",", ":"),
-    ).encode("utf-8")
+    ).encode()
     process = await asyncio.create_subprocess_exec(
-        *_helper_command(),
+        __import__("sys").executable,
+        "-m",
+        "agent.ot.opcua.worker",
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,
     )
-    stdout, _ = await process.communicate(request)
-    assert process.returncode == 0
-    return stdout
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _built_helper() -> None:
-    dotnet = shutil.which("dotnet")
-    if dotnet is None:
-        pytest.skip(
-            ".NET SDK is not installed; helper installation is validated in Task 9"
-        )
-    env = os.environ.copy()
-    env["DOTNET_HOST_PATH"] = dotnet
-    env["DOTNET_ROOT"] = str(Path(dotnet).parent)
-    subprocess.run(
-        [dotnet, "build", str(HELPER), "--nologo", "--verbosity", "quiet"],
-        cwd=ROOT,
-        env=env,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    assert process.stdin is not None and process.stdout is not None
+    process.stdin.write(request)
+    await process.stdin.drain()
+    process.stdin.close()
+    output = await process.stdout.read(131073)
+    process.kill() if len(output) > 131072 else None
+    await process.wait()
+    return output
 
 
 @pytest.mark.asyncio
-async def test_discovery_observes_real_get_endpoints_and_closes_channel(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    dotnet = shutil.which("dotnet")
-    assert dotnet is not None
-    monkeypatch.setenv("DOTNET_HOST_PATH", dotnet)
-    monkeypatch.setenv("DOTNET_ROOT", str(Path(dotnet).parent))
+async def test_discovery_observes_real_get_endpoints_and_closes_channel() -> None:
 
     with OpcUaLabServer() as server:
         result = await OpcUaClient().discover_endpoints(server.host, server.port)
@@ -97,13 +68,7 @@ async def test_discovery_observes_real_get_endpoints_and_closes_channel(
 
 
 @pytest.mark.asyncio
-async def test_probe_sends_only_allowlisted_metadata_services(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    dotnet = shutil.which("dotnet")
-    assert dotnet is not None
-    monkeypatch.setenv("DOTNET_HOST_PATH", dotnet)
-    monkeypatch.setenv("DOTNET_ROOT", str(Path(dotnet).parent))
+async def test_probe_sends_only_allowlisted_metadata_services() -> None:
 
     with OpcUaLabServer() as server:
         result = await OpcUaClient().probe_read_only_services(server.host, server.port)
@@ -128,13 +93,7 @@ async def test_probe_sends_only_allowlisted_metadata_services(
 
 
 @pytest.mark.asyncio
-async def test_anonymous_mapping_uses_one_session_and_read_only_services(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    dotnet = shutil.which("dotnet")
-    assert dotnet is not None
-    monkeypatch.setenv("DOTNET_HOST_PATH", dotnet)
-    monkeypatch.setenv("DOTNET_ROOT", str(Path(dotnet).parent))
+async def test_anonymous_mapping_uses_one_session_and_read_only_services() -> None:
 
     with OpcUaLabServer() as server:
         client = OpcUaClient()
@@ -161,22 +120,24 @@ async def test_anonymous_mapping_uses_one_session_and_read_only_services(
         assert len(node_ids) == len(set(node_ids))
         assert "external_reference" in result.mapping.reason_codes
         sent = server.received_request_type_ids[before:]
-        assert ua.ObjectIds.CreateSessionRequest_Encoding_DefaultBinary in sent
-        assert ua.ObjectIds.ActivateSessionRequest_Encoding_DefaultBinary in sent
-        assert ua.ObjectIds.BrowseRequest_Encoding_DefaultBinary in sent
-        assert ua.ObjectIds.ReadRequest_Encoding_DefaultBinary in sent
-        assert ua.ObjectIds.CloseSessionRequest_Encoding_DefaultBinary in sent
-        assert ua.ObjectIds.WriteRequest_Encoding_DefaultBinary not in sent
+        service_ids = {
+            "GetEndpoints": ua.ObjectIds.GetEndpointsRequest_Encoding_DefaultBinary,
+            "CreateSession": ua.ObjectIds.CreateSessionRequest_Encoding_DefaultBinary,
+            "ActivateSession": (
+                ua.ObjectIds.ActivateSessionRequest_Encoding_DefaultBinary
+            ),
+            "Browse": ua.ObjectIds.BrowseRequest_Encoding_DefaultBinary,
+            "BrowseNext": ua.ObjectIds.BrowseNextRequest_Encoding_DefaultBinary,
+            "Read": ua.ObjectIds.ReadRequest_Encoding_DefaultBinary,
+            "CloseSession": ua.ObjectIds.CloseSessionRequest_Encoding_DefaultBinary,
+        }
+        assert set(sent) <= set(service_ids.values())
+        for name, type_id in service_ids.items():
+            assert sent.count(type_id) == result.stats.requests.get(name, 0)
 
 
 @pytest.mark.asyncio
-async def test_live_mapping_caps_large_browse_results_before_ipc(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    dotnet = shutil.which("dotnet")
-    assert dotnet is not None
-    monkeypatch.setenv("DOTNET_HOST_PATH", dotnet)
-    monkeypatch.setenv("DOTNET_ROOT", str(Path(dotnet).parent))
+async def test_live_mapping_caps_large_browse_results_before_ipc() -> None:
 
     with OpcUaLabServer(bulk_variables=180, long_identifiers=True) as server:
         raw_stdout = await _raw_mapping_stdout(server.host, server.port)
@@ -204,13 +165,7 @@ async def test_live_mapping_caps_large_browse_results_before_ipc(
 
 
 @pytest.mark.asyncio
-async def test_opaque_node_sentinel_is_absent_from_raw_helper_stdout(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    dotnet = shutil.which("dotnet")
-    assert dotnet is not None
-    monkeypatch.setenv("DOTNET_HOST_PATH", dotnet)
-    monkeypatch.setenv("DOTNET_ROOT", str(Path(dotnet).parent))
+async def test_opaque_node_sentinel_is_absent_from_raw_helper_stdout() -> None:
     sentinel = "OPAQUE_NODE_SENTINEL_REVIEW"
 
     with OpcUaLabServer(
@@ -224,6 +179,7 @@ async def test_opaque_node_sentinel_is_absent_from_raw_helper_stdout(
             sentinel,
             sentinel + "_METADATA_DATA",
             sentinel + "_METADATA_REF",
+            "PROCESS_VALUE_SENTINEL",
         ):
             secret_bytes = secret.encode()
             assert secret_bytes not in raw_stdout
@@ -236,6 +192,12 @@ async def test_opaque_node_sentinel_is_absent_from_raw_helper_stdout(
             if node["browse_name"] == "OpaqueDataType"
         )
         assert opaque_data_node["data_type"] is None
+        assert response["mapping"]["value_reads_attempted"] > 0
+        assert any(
+            node.get("value_read_status") in {"Good", "Bad", "Denied", "Error"}
+            for node in response["mapping"]["nodes"]
+        )
+        assert all("value" not in node for node in response["mapping"]["nodes"])
         discovery = await OpcUaClient().discover_endpoints(server.host, server.port)
         endpoint = next(
             item for item in discovery.endpoints if "Anonymous" in item.user_token_types
@@ -246,13 +208,7 @@ async def test_opaque_node_sentinel_is_absent_from_raw_helper_stdout(
 
 
 @pytest.mark.asyncio
-async def test_anonymous_denial_is_explicit_on_real_loopback(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    dotnet = shutil.which("dotnet")
-    assert dotnet is not None
-    monkeypatch.setenv("DOTNET_HOST_PATH", dotnet)
-    monkeypatch.setenv("DOTNET_ROOT", str(Path(dotnet).parent))
+async def test_anonymous_denial_is_explicit_on_real_loopback() -> None:
 
     with OpcUaLabServer(deny_anonymous=True) as server:
         client = OpcUaClient()
@@ -281,13 +237,7 @@ async def test_anonymous_denial_is_explicit_on_real_loopback(
 
 
 @pytest.mark.asyncio
-async def test_browse_denial_keeps_prior_loopback_references(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    dotnet = shutil.which("dotnet")
-    assert dotnet is not None
-    monkeypatch.setenv("DOTNET_HOST_PATH", dotnet)
-    monkeypatch.setenv("DOTNET_ROOT", str(Path(dotnet).parent))
+async def test_browse_denial_keeps_prior_loopback_references() -> None:
 
     with OpcUaLabServer(deny_browse_after_first=True) as server:
         client = OpcUaClient()
@@ -301,7 +251,7 @@ async def test_browse_denial_keeps_prior_loopback_references(
         assert result.mapping.status == "partial"
         assert "anonymous_denied" in result.mapping.reason_codes
         assert result.mapping.anonymous_session_activated is True
-        assert result.mapping.browse_succeeded is False
+        assert result.mapping.browse_succeeded is True
         assert result.mapping.references_observed > 0
         assert result.mapping.nodes
         assert "PROCESS_VALUE_SENTINEL" not in repr(result)
@@ -314,13 +264,7 @@ async def test_browse_denial_keeps_prior_loopback_references(
 
 
 @pytest.mark.asyncio
-async def test_browse_decoder_limit_keeps_prior_loopback_nodes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    dotnet = shutil.which("dotnet")
-    assert dotnet is not None
-    monkeypatch.setenv("DOTNET_HOST_PATH", dotnet)
-    monkeypatch.setenv("DOTNET_ROOT", str(Path(dotnet).parent))
+async def test_browse_decoder_limit_keeps_prior_loopback_nodes() -> None:
 
     with OpcUaLabServer(browse_error_after_first=True) as server:
         client = OpcUaClient()
@@ -340,13 +284,7 @@ async def test_browse_decoder_limit_keeps_prior_loopback_nodes(
 
 
 @pytest.mark.asyncio
-async def test_budget_exhaustion_keeps_observed_mapping_nodes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    dotnet = shutil.which("dotnet")
-    assert dotnet is not None
-    monkeypatch.setenv("DOTNET_HOST_PATH", dotnet)
-    monkeypatch.setenv("DOTNET_ROOT", str(Path(dotnet).parent))
+async def test_budget_exhaustion_keeps_observed_mapping_nodes() -> None:
 
     with OpcUaLabServer() as server:
         client = OpcUaClient()
@@ -363,17 +301,21 @@ async def test_budget_exhaustion_keeps_observed_mapping_nodes(
         assert result.mapping.nodes
         assert result.mapping.references_observed > 0
         assert "request_budget_exhausted" in result.mapping.reason_codes
+        assert result.stats.requests_total == 12
+        assert result.stats.requests["CloseSession"] == 1
+        assert result.stats.requests["CloseSecureChannel"] == 1
+        assert result.request_count_known is True
+        assert (
+            server.received_request_type_ids.count(
+                ua.ObjectIds.CloseSessionRequest_Encoding_DefaultBinary
+            )
+            == 1
+        )
         assert result.stats.requests_total <= 12
 
 
 @pytest.mark.asyncio
-async def test_timeout_on_second_browse_keeps_first_browse_nodes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    dotnet = shutil.which("dotnet")
-    assert dotnet is not None
-    monkeypatch.setenv("DOTNET_HOST_PATH", dotnet)
-    monkeypatch.setenv("DOTNET_ROOT", str(Path(dotnet).parent))
+async def test_timeout_on_second_browse_keeps_first_browse_nodes() -> None:
 
     with OpcUaLabServer(delay_second_browse=2.5) as server:
         client = OpcUaClient()
@@ -391,18 +333,13 @@ async def test_timeout_on_second_browse_keeps_first_browse_nodes(
         assert result.mapping.references_observed > 0
         assert result.mapping.reason_codes
         assert result.mapping.application_value_read_succeeded is None
+        assert result.mapping.browse_succeeded is True
         sent = server.received_request_type_ids
         assert sent.count(ua.ObjectIds.BrowseRequest_Encoding_DefaultBinary) == 2
 
 
 @pytest.mark.asyncio
-async def test_mapping_cancellation_after_create_session_sends_no_cleanup(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    dotnet = shutil.which("dotnet")
-    assert dotnet is not None
-    monkeypatch.setenv("DOTNET_HOST_PATH", dotnet)
-    monkeypatch.setenv("DOTNET_ROOT", str(Path(dotnet).parent))
+async def test_mapping_cancellation_after_create_session_sends_no_cleanup() -> None:
 
     with OpcUaLabServer(delay_second_browse=2.5) as server:
         client = OpcUaClient()
@@ -432,13 +369,7 @@ async def test_mapping_cancellation_after_create_session_sends_no_cleanup(
 
 
 @pytest.mark.asyncio
-async def test_timeout_aborts_delayed_service_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    dotnet = shutil.which("dotnet")
-    assert dotnet is not None
-    monkeypatch.setenv("DOTNET_HOST_PATH", dotnet)
-    monkeypatch.setenv("DOTNET_ROOT", str(Path(dotnet).parent))
+async def test_timeout_aborts_delayed_service_request() -> None:
 
     with OpcUaLabServer(delay_get_endpoints=1.8) as server:
         result = await OpcUaClient().discover_endpoints(
@@ -447,19 +378,17 @@ async def test_timeout_aborts_delayed_service_request(
 
         assert result.status == "error"
         assert result.error == "timeout"
+        assert result.request_count_known is True
+        assert result.stats is not None
+        assert result.stats.requests_total == 3
+        assert result.stats.requests["GetEndpoints"] == 1
         assert server.received_request_type_ids == (
             ua.ObjectIds.GetEndpointsRequest_Encoding_DefaultBinary,
         )
 
 
 @pytest.mark.asyncio
-async def test_external_cancellation_kills_inflight_helper_without_cleanup(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    dotnet = shutil.which("dotnet")
-    assert dotnet is not None
-    monkeypatch.setenv("DOTNET_HOST_PATH", dotnet)
-    monkeypatch.setenv("DOTNET_ROOT", str(Path(dotnet).parent))
+async def test_external_cancellation_kills_inflight_helper_without_cleanup() -> None:
 
     with OpcUaLabServer(delay_get_endpoints=2.0) as server:
         task = asyncio.create_task(
@@ -480,13 +409,7 @@ async def test_external_cancellation_kills_inflight_helper_without_cleanup(
 
 
 @pytest.mark.asyncio
-async def test_oversized_get_endpoints_returns_bounded_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    dotnet = shutil.which("dotnet")
-    assert dotnet is not None
-    monkeypatch.setenv("DOTNET_HOST_PATH", dotnet)
-    monkeypatch.setenv("DOTNET_ROOT", str(Path(dotnet).parent))
+async def test_oversized_get_endpoints_returns_bounded_error() -> None:
 
     with OpcUaLabServer(oversized=True) as server:
         result = await OpcUaClient().discover_endpoints(server.host, server.port)

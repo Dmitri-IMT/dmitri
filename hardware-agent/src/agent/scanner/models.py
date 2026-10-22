@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
 from agent.ot.modbus.models import ModbusService
+from agent.ot.opcua.models import OpcUaInventory
 
 if TYPE_CHECKING:
     from agent.targeted.models import TargetedUnitResult
@@ -102,6 +103,7 @@ StageEvidenceSource = Literal[
     "service_recovery",
     "port_discovery",
     "modbus_inspection",
+    "opcua_inspection",
     "not_run",
 ]
 
@@ -112,6 +114,9 @@ class StageCoverage:
     outcome: CoverageOutcome
     evidence_source: StageEvidenceSource
     reason_code: str | None = None
+    port: int | None = None
+    protocol: Literal["tcp", "udp"] | None = None
+    tool: str | None = None
 
 
 @dataclass(slots=True)
@@ -126,6 +131,7 @@ class HostInfo:
     operating_system: OperatingSystemInfo | None = None
     host_scripts: list[ScriptResult] = field(default_factory=list)
     industrial_services: list[ModbusService] = field(default_factory=list)
+    opcua_services: list[OpcUaInventory] = field(default_factory=list)
     targeted_results: list[TargetedUnitResult] = field(default_factory=list)
     stage_coverage: list[StageCoverage] = field(default_factory=list)
 

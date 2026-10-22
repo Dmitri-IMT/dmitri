@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from .client import OpcUaClient
@@ -22,6 +23,8 @@ async def map_opcua_service(
     *,
     request_budget: int = 32,
     timeout: float = 2.0,
+    deadline: float = 90.0,
+    pacing_ms: int = 100,
 ) -> OpcUaMappingResult:
     """Run one anonymous mapping session; process Values stay in the helper."""
     endpoint = next(
@@ -48,9 +51,16 @@ async def map_opcua_service(
         endpoint,
         request_budget=request_budget,
         timeout=timeout,
+        deadline=deadline,
+        pacing_ms=pacing_ms,
     )
     if result.mapping is not None:
-        return result.mapping
+        return replace(
+            result.mapping,
+            requests_sent=result.stats.requests_total,
+            write_requests_sent=result.stats.write_requests_sent,
+            request_count_known=result.request_count_known,
+        )
     reason = {
         "timeout": "timeout",
         "request_budget_exhausted": "request_budget_exhausted",
@@ -62,8 +72,17 @@ async def map_opcua_service(
     status = (
         "timed_out"
         if reason == "timeout"
-        else "denied"
-        if reason == "anonymous_denied"
-        else "failed"
+        else (
+            "partial"
+            if reason == "request_budget_exhausted"
+            else "denied" if reason == "anonymous_denied" else "failed"
+        )
     )
-    return OpcUaMappingResult(status, (reason,), observed_at=now)
+    return OpcUaMappingResult(
+        status,
+        (reason,),
+        observed_at=now,
+        requests_sent=result.stats.requests_total,
+        write_requests_sent=result.stats.write_requests_sent,
+        request_count_known=result.request_count_known,
+    )

@@ -130,6 +130,7 @@ class ModbusReadSession:
             "holding_register": self._client.read_holding_registers,
             "input_register": self._client.read_input_registers,
         }
+        request_count_before = self._client.request_count
         try:
             response = methods[address_space](
                 start_address,
@@ -140,7 +141,7 @@ class ModbusReadSession:
                 return ModbusReadResult(
                     status="timeout",
                     error=str(response) or None,
-                    request_sent=True,
+                    request_sent=self._client.request_count > request_count_before,
                 )
             if response.isError():
                 exception_code = getattr(response, "exception_code", None)
@@ -152,7 +153,7 @@ class ModbusReadSession:
                     status=status,
                     exception_code=code,
                     error=str(response),
-                    request_sent=True,
+                    request_sent=self._client.request_count > request_count_before,
                 )
             raw_values = (
                 getattr(response, "bits", [])[:count]
@@ -171,16 +172,24 @@ class ModbusReadSession:
                 return ModbusReadResult(
                     status="error",
                     error=f"Expected {count} values, received {len(values)}",
-                    request_sent=True,
+                    request_sent=self._client.request_count > request_count_before,
                 )
-            return ModbusReadResult(status="readable", values=values, request_sent=True)
+            return ModbusReadResult(
+                status="readable",
+                values=values,
+                request_sent=self._client.request_count > request_count_before,
+            )
         except (TimeoutError, ModbusIOException) as exc:
             return ModbusReadResult(
-                status="timeout", error=str(exc) or None, request_sent=True
+                status="timeout",
+                error=str(exc) or None,
+                request_sent=self._client.request_count > request_count_before,
             )
         except (ModbusException, OSError, RuntimeError, ValueError) as exc:
             return ModbusReadResult(
-                status="error", error=str(exc) or None, request_sent=True
+                status="error",
+                error=str(exc) or None,
+                request_sent=self._client.request_count > request_count_before,
             )
 
 
@@ -216,11 +225,13 @@ def probe_device_identification(
             object_id=0,
             device_id=unit_id,
         )
+        request_sent = client.request_count > 0
         if isinstance(response, ModbusIOException):
             return ModbusUnit(
                 unit_id=unit_id,
                 status="timeout",
                 error=str(response) or None,
+                request_sent=request_sent,
             )
         if response.isError():
             exception_code = getattr(response, "exception_code", None)
@@ -233,6 +244,7 @@ def probe_device_identification(
                     else None
                 ),
                 error=str(response),
+                request_sent=request_sent,
             )
         try:
             identification = _decode_device_information(
@@ -243,6 +255,7 @@ def probe_device_identification(
                 unit_id=unit_id,
                 status="error",
                 error=type(exc).__name__,
+                request_sent=request_sent,
             )
         return ModbusUnit(
             unit_id=unit_id,
@@ -251,11 +264,22 @@ def probe_device_identification(
             identification_sources=(
                 ["pymodbus-fc43"] if identification is not None else []
             ),
+            request_sent=request_sent,
         )
     except (TimeoutError, ModbusIOException) as exc:
-        return ModbusUnit(unit_id=unit_id, status="timeout", error=str(exc) or None)
+        return ModbusUnit(
+            unit_id=unit_id,
+            status="timeout",
+            error=str(exc) or None,
+            request_sent=client.request_count > 0,
+        )
     except (ModbusException, OSError, RuntimeError, ValueError) as exc:
-        return ModbusUnit(unit_id=unit_id, status="error", error=str(exc) or None)
+        return ModbusUnit(
+            unit_id=unit_id,
+            status="error",
+            error=str(exc) or None,
+            request_sent=client.request_count > 0,
+        )
     finally:
         if controller is not None:
             controller.release(client)

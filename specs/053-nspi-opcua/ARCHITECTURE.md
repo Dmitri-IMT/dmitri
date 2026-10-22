@@ -1,6 +1,10 @@
 # Arquitetura — OPC UA no NSPi
 
-Architecture approved 2026-10-20, base `971ba8d`. Task 1 implementation is complete and reviewer-approved; Tasks 2–9 remain pending.
+Architecture approved 2026-10-20, base `971ba8d`; language migration authorized
+2026-10-21. Tasks 1–4 are completed history. M1 → M2 replaces the .NET helper
+entirely with Python, preserving their acceptance criteria; Task 5 follows.
+The executable migration design, source evidence, exact seams and gates are in
+[PYTHON_MIGRATION.md](PYTHON_MIGRATION.md).
 Escopo e aceite: [TRUTH.md](TRUTH.md). Caminhos e testes: [INTEGRATION.md](INTEGRATION.md).
 Fontes internas consultadas: `docs/README.md`, ADR-018 e ADR-019; code-map usado apenas
 para localizar o código. O código atual prevalece sobre descrições antigas.
@@ -24,12 +28,17 @@ decisão proposta para aprovação junto com o plano.
 
 ## Cliente e fronteira de operações
 
-Usar helper first-party .NET 10 com OPC Foundation UA-.NETStandard 2.0.1 (NuGet
-fixado no projeto helper), exposto ao agente por IPC JSON fechado. O wrapper Python
-não expõe cliente SDK, Node, nem valores UA. A fixture pode usar `asyncua==2.1.0`
-somente como dependência de desenvolvimento. Preservar o aviso MIT da OPC Foundation
-em `helper/LICENSE.txt`; o helper é compilado fora do runtime Python e seu
-empacotamento/instalação é responsabilidade da Task 9.
+Usar `asyncua==2.1.0` como dependência Python de runtime em subprocesso isolado,
+lançado por `sys.executable -m agent.ot.opcua.worker`. O wrapper conserva IPC JSON
+fechado e não expõe SDK, Node ou valores UA. Instalar guardas auditadas de decoder
+somente no worker, antes do tráfego, sem alterar site-packages ou o servidor do
+laboratório. `bounded_decode.py` limita os caminhos de arrays, strings/bytes,
+ExtensionObject, dimensões e recursão antes de alocar. `guarded_transport.py`
+reutiliza o protocolo/canal upstream com socket limitado e envio serializado.
+Remover fontes C#, projetos e harness .NET, descoberta de apphost/DLL e variáveis
+`DMITRI_OPCUA_BRIDGE`/DOTNET. A migração completa não depende de Task 9 para remover
+.NET. Preservar licença/atribuição LGPLv3+ de asyncua; Task 9 valida wheelhouse e
+execução offline Linux ARM64. Nomes e testes: `PYTHON_MIGRATION.md`.
 
 Adaptador específico `ot/opcua/client.py`, sem registro genérico de plugins. Expor
 somente descobrir endpoints, abrir/fechar sessão anônima, Browse/BrowseNext e Read
@@ -69,7 +78,7 @@ resultados do outro protocolo. Serviços não iniciados ganham cobertura `skippe
 |---|---|
 | Portas candidatas ativamente inspecionadas por host | 4; excedentes com `service_limit` |
 | Requisições enviadas por host | 32, **incluindo** HEL, canais, sessões e cleanup |
-| Reserva de encerramento dentro das 32 | 4; nenhum novo trabalho ao restarem apenas 4 |
+| Reserva de encerramento dentro das 32 | 2; um envio `CloseSession` e um `CloseSecureChannel`; nenhum novo trabalho ao restarem apenas 2 |
 | Sessões de mapeamento | 1 por serviço; sem retry ou reconexão automática |
 | Pacing entre todos os envios, incluindo lifecycle | >=100 ms; política local só pode aumentar |
 | Timeout de conexão/operação | 2 s ou prazo restante, o menor |
@@ -88,17 +97,25 @@ Requisição é um envio UA/Modbus de aplicação ou lifecycle, não pacote TCP.
 tentativa entregue ao transport mesmo quando a resposta falha; impedir envio antes
 do limite. Guardar separados requests por tipo, bytes enviados/recebidos e chunks
 UA; **não chamar estes números de pacotes de rede**. Nmap continua com sua própria
-contabilidade; PCAP de laboratório mede pacotes reais. Cleanup consome reserva;
+contabilidade; PCAP de laboratório mede pacotes reais. O encerramento normal reserva
+um envio de uso único para `CloseSession` e outro para `CloseSecureChannel`; cada
+reserva é consumida mesmo se o resultado do envio ficar ambíguo. Cleanup consome reserva;
 se faltar tempo ou orçamento, abortar conexão. Continuação liberada usa BrowseNext
 com release quando há reserva, tempo e nenhum cancelamento.
 
-Configurar limites do SDK antes do tráfego: MaxMessageSize=128 KiB,
-MaxBufferSize=64 KiB, MaxChunkCount=16, arrays <=1024, textos/bytes limitados e
-nesting <=8. Uma guarda no transporte valida o tamanho declarado e real de cada
+Configurar limites do SDK antes do tráfego: mensagem=128 KiB,
+buffer=64 KiB, chunks=16, arrays <=1024, textos/bytes limitados e
+nesting <=8. As guardas locais são obrigatórias: asyncua sem adaptação não fornece
+todos estes limites antes de alocar. Uma guarda no transporte valida tamanho declarado e real de cada
 frame, soma bytes e chunks por mensagem antes de entregar o chunk ao decoder; HEL
 local anuncia exatamente 64/64/128 KiB e 16 chunks, e ACK remoto zero/unbounded ou
-acima desses caps é rejeitado. O teste harness cobre 16/17 chunks, reset por
-mensagem, ACK e `BinaryDecoder.ReadVariant` com limite de array antes da alocação.
+acima desses caps é rejeitado antes de atualizar os limites upstream. Construir
+HEL explicitamente; não confiar nos defaults da biblioteca. Testes Python cobrem
+16/17 chunks, reset, ACK e os dois caminhos de array (Variant e lista de dataclass)
+do decoder fixado antes de alocar. Envio confirmado usa conclusão de
+`loop.sock_sendall` do primeiro frame, não retorno de `Transport.write` com buffer.
+Falha parcial ambígua aborta e marca contagem desconhecida; reservar cleanup uma
+única vez mesmo nesse caso. O recibo de envio precede o retorno da resposta.
 GetEndpoints não pagina: resposta maior que 128 KiB gera `message_size_limit`, sem
 elevar o limite automaticamente. Não registrar corpo binário ou valor de processo.
 
@@ -250,8 +267,9 @@ servidor antigo. JSON técnico carrega detalhe tipado; PDF explicado ganha resum
 industrial por protocolo e limitações, sem despejar grafo. AI recebe apenas contagens
 e estados agregados, sem URLs, NodeIds, labels ou strings do equipamento.
 
-Os testes focais atuais exercitam o helper e o wrapper com fixture OPC UA loopback;
-o oversized GetEndpoints comprova rejeição pré-decode após tráfego >128 KiB recebido.
-Build/test foram validados localmente em Windows; ainda não foi validado build,
-empacotamento ou execução Linux ARM64, nem servidor PLC real. A fixture não substitui
-essa validação.
+O histórico Tasks 1–4 comprovou o helper anterior em Windows. M1/M2 devem repetir
+os gates com o worker Python e fixture loopback, inclusive rejeição pré-decode,
+tráfego recebido, pacing, 32/64 requests, cancelamento e dois slots de cleanup.
+O worker preserva a identidade `DMITRI` do próprio host implementada na Task 4.
+Ainda não foi validado empacotamento/execução Linux ARM64 nem PLC real; Task 9
+conserva esses gates. A fixture não substitui essa validação.

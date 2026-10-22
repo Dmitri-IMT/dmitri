@@ -77,6 +77,8 @@ def _current_payload(*, findings: bool = True) -> ScanPayload:
             ),
         ],
     )
+
+
     finding_list = (
         [
             FindingPayload(
@@ -167,6 +169,16 @@ def _current_payload(*, findings: bool = True) -> ScanPayload:
         ],
         metadata={"elapsed_seconds": 12},
     )
+
+
+def test_scan_header_reads_legacy_modbus_deadline_metadata() -> None:
+    payload = _current_payload()
+    payload.metadata = {
+        "modbus_stage_deadline_reached": True,
+        "modbus_stage_deadline_seconds": 600,
+    }
+    header = ScanViewScreen(payload=payload)._render_header(payload)
+    assert "Time limit reached during industrial inspection (600s)" in header
 
 
 def _legacy_payload() -> ScanPayload:

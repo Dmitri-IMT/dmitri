@@ -188,7 +188,7 @@ def test_ot_deadline_marks_completed_scan_payload_partial(
 
     assert errors == []
     assert completed[0].metadata["partial_result"] is True
-    assert completed[0].metadata["modbus_stage_deadline_reached"] is True
+    assert completed[0].metadata["industrial_stage_deadline_reached"] is True
 
 
 def test_targeted_timeout_retains_endpoint_observation_and_issue_provenance() -> None:
@@ -295,6 +295,20 @@ def test_stop_before_ot_records_ot_only_for_modbus_hosts() -> None:
     assert _stop(web, "deep_inspection", "timeout", targeted=False, ot=True) == [
         ("deep_inspection", "skipped", "scan_timeout", "not_run")
     ]
+
+    opcua = _one_host()[0]
+    opcua.ports = [PortInfo(port=4840, service=ServiceInfo(name="opcua"))]
+    assert _stop(opcua, "deep_inspection", "timeout", targeted=False, ot=True) == [
+        ("ot_inspection", "skipped", "scan_timeout", "opcua_inspection"),
+        ("deep_inspection", "skipped", "scan_timeout", "not_run"),
+    ]
+    opcua_line = next(
+        item for item in extract_coverage([opcua])
+        if item.evidence_source == "opcua_inspection"
+    )
+    assert (opcua_line.port, opcua_line.protocol, opcua_line.tool) == (
+        4840, "tcp", "opcua"
+    )
 
     modbus = _one_host()[0]
     modbus.ports = [PortInfo(port=502, service=ServiceInfo(name="modbus"))]

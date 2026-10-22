@@ -155,9 +155,7 @@ class DeviceDetailScreen(DmitriScreen):
             evidence = "; ".join(safe(item.value) for item in profile.evidence)
             lines.append(f"Based on: {evidence}")
         for conflict in profile.conflicts:
-            lines.append(
-                "[yellow]⚠ Conflicting evidence:[/yellow] " f"{safe(conflict)}"
-            )
+            lines.append(f"[yellow]⚠ Conflicting evidence:[/yellow] {safe(conflict)}")
         for limitation in profile.limitations:
             lines.append(f"Limitation: {safe(limitation)}")
         return "\n".join(lines)
@@ -362,8 +360,7 @@ class DeviceDetailScreen(DmitriScreen):
                             f"    Source: {safe(source, LIMIT_HOST_TEXT)} · Rule: "
                             f"{safe(observation.rule_id, LIMIT_HOST_TEXT)} "
                             f"v{safe(observation.rule_version)}",
-                            f"    Evidence excerpt: "
-                            f"{safe(observation.evidence, 160)}",
+                            f"    Evidence excerpt: {safe(observation.evidence, 160)}",
                         )
                     )
                     if observation.facts:
@@ -462,6 +459,18 @@ class DeviceDetailScreen(DmitriScreen):
         lines = ["[bold]Industrial inventory[/bold]"]
         tracker = ShortenTracker()
         for service in self._host.industrial_services:
+            if service.protocol == "opcua_tcp":
+                lines.append(
+                    f"OPC UA TCP {service.port} - {service.confidence.upper()}"
+                )
+                lines.append(
+                    f"  Inventory: {service.observation.inventory_phase.status}"
+                )
+                if service.observation.mapping is not None:
+                    lines.append(
+                        f"  Mapping: {service.observation.mapping.phase.status}"
+                    )
+                continue
             lines.append(f"Modbus TCP {service.port} - {service.confidence.upper()}")
             if service.mapping_source:
                 lines.append(

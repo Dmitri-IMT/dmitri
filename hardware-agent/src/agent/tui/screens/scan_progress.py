@@ -385,7 +385,7 @@ class ScanProgressScreen(DmitriScreen):
                     ),
                 )
             return
-        if kind == "modbus_host_inspected":
+        if kind in {"modbus_host_inspected", "industrial_host_inspected"}:
             action = (
                 "Mapped" if self.nspi_submode == "read_only_mapping" else "Inventoried"
             )

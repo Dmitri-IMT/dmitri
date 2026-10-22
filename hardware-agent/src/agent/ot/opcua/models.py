@@ -61,12 +61,18 @@ class OpcUaInventory:
     reason_code: str | None = None
     reason_codes: tuple[str, ...] = ()
     truncated: bool = False
+    requests_sent: int = 0
+    request_count_known: bool = True
+    write_requests_sent: int = 0
+    client_endpoints: tuple[OpcUaEndpoint, ...] = field(default=(), repr=False)
+    mapping: "OpcUaMappingResult | None" = None
 
 
 @dataclass(frozen=True, slots=True)
 class OpcUaRequestStats:
     requests: dict[str, int] = field(default_factory=dict)
     requests_total: int = 0
+    write_requests_sent: int = 0
     bytes_sent: int = 0
     bytes_received: int = 0
     hello_limits: tuple[int, int, int, int] | None = None
@@ -80,6 +86,7 @@ class OpcUaClientResult:
     stats: OpcUaRequestStats = field(default_factory=OpcUaRequestStats)
     endpoints_truncated: bool = False
     mapping: "OpcUaMappingResult | None" = None
+    request_count_known: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,3 +129,6 @@ class OpcUaMappingResult:
     security_policy: dict[str, str] = field(default_factory=dict)
     observed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     truncated: bool = False
+    requests_sent: int = 0
+    write_requests_sent: int = 0
+    request_count_known: bool = True
