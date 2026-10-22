@@ -356,7 +356,6 @@ async def request_update(
             try:
                 await connection.websocket.send_text(frame.model_dump_json())
             except Exception:
-                # The request expires unclaimed after a lost send; do not retry it.
                 pass
         return operation, True
 

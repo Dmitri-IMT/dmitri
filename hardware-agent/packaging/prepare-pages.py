@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-"""Create a GitHub Pages tree with the signed APT suite materialized."""
-
 from __future__ import annotations
 
 import argparse

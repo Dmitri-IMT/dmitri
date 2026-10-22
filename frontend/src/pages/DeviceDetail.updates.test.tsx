@@ -272,7 +272,6 @@ describe('Device update section', () => {
       mockAvailability(available)
       await renderDeviceDetail(60000, false)
 
-      // Let the initial requests settle while advancing fake timers in small steps.
       for (
         let attempt = 0;
         attempt < 100 && operationCalls === 0;

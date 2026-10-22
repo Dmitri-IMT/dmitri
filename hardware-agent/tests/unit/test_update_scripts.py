@@ -93,7 +93,6 @@ def test_bootstrap_consumes_staged_bytes_after_original_inputs_are_replaced(
     ]
     assert stage.stat().st_mode & 0o777 == 0o700
     assert all(path.stat().st_mode & 0o777 == 0o600 for path in staged)
-    # The validation boundary observes only private copies.
     key_info = subprocess.run(
         ["gpg", "--batch", "--show-keys", "--with-colons", str(staged[0])],
         check=True,
@@ -142,7 +141,6 @@ def test_bootstrap_consumes_staged_bytes_after_original_inputs_are_replaced(
         replacement.write_bytes(b"attacker replacement")
         replacement.replace(original)
 
-    # Run the actual keyring, installation and cache consumers with isolated paths.
     trust = tmp_path / "trust"
     trust.mkdir()
     cache = tmp_path / "cache"

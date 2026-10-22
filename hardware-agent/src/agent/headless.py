@@ -120,7 +120,6 @@ def run_headless_scan(
         captured_error = error
 
     try:
-        # Keep admission across runner completion and the durable result write.
         with scan_lock(scan_lease) as lease:
             scan_runner = ScanRunner(
                 subnet,

@@ -82,7 +82,6 @@ class ScanRunner:
 
     @property
     def scan_lease(self) -> ScanLease | None:
-        """Lease borrowed from the caller, if this runner is nested in a flow."""
         return self._scan_lease
 
     def start(self) -> None:

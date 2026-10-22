@@ -28,7 +28,6 @@ def _smoke_wheel(path: Path) -> None:
     reason="requires Docker to run dpkg in a disposable Linux container",
 )
 def test_agent_package_postinst_runs_offline_and_recovers_failed_install(tmp_path):
-    """Run the actual postinst under dpkg in a network-isolated disposable container."""
     builder = (ROOT / "packaging/build-deb.sh").read_text(encoding="utf-8")
     postinst = builder.split("cat >\"$agent_root/DEBIAN/postinst\" <<'EOF'\n", 1)[1]
     postinst = postinst.split("\nEOF", 1)[0]
@@ -148,7 +147,6 @@ echo 'dpkg offline install, CLI smoke, and failed-install recovery passed'
 def test_companion_dpkg_transaction_rolls_back_snapshot_and_reports_evidence(
     tmp_path: Path, failure_kind: str, expected_error: str,
 ):
-    """Exercise the companion transaction with real dpkg in an isolated Linux container."""
     transaction = r'''import hashlib
 import importlib.util
 import json
@@ -298,7 +296,6 @@ python /fixtures/transaction.py
     reason="requires Docker for a signed HTTPS APT repository fixture",
 )
 def test_signed_https_apt_metadata_is_revalidated_on_cache_hit(tmp_path: Path):
-    """Use real apt/gpgv verification against an ephemeral signed HTTPS repository."""
     probe = subprocess.run(
         ["docker", "image", "inspect", "dmitri-main-test-agent:latest"],
         capture_output=True,

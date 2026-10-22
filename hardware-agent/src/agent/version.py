@@ -11,7 +11,4 @@ def installed_version() -> str:
     return package_version("hardware-agent")
 
 
-# Capture the release identity once per process. The package metadata can be
-# replaced while an idle TUI remains open, so scans compare this snapshot with
-# the currently installed metadata before admission.
 PROCESS_START_VERSION = installed_version()

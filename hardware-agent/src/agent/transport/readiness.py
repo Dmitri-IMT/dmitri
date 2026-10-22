@@ -1,5 +1,3 @@
-"""Local nonce handshake with the root updater supervisor."""
-
 from __future__ import annotations
 
 import json
@@ -19,7 +17,6 @@ def readiness_handshake(
     socket_path: Path = SOCKET_PATH,
     package_version: str | None = None,
 ) -> dict[str, Any]:
-    """Prove this process is the current systemd MainPID and report local versions."""
     version = package_version or _dpkg_version()
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
         connection.settimeout(3)

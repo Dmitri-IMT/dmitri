@@ -1,10 +1,3 @@
-"""Shared admission lease for scans and the appliance updater.
-
-Scans take a nonblocking shared flock on the stable appliance lock inode. The
-updater takes the same inode exclusively. The descriptor can be deliberately
-inherited by scan subprocesses so an orphaned child continues to block updates.
-"""
-
 from __future__ import annotations
 
 import json
@@ -24,12 +17,6 @@ FINALIZATION_CHECKPOINT_PATH = Path(
 
 
 def _is_source_checkout() -> bool:
-    """Return whether this module is imported from the repository source tree.
-
-    Distribution metadata is intentionally not used: editable installs and
-    stale/incomplete ``.dist-info`` directories make it unreliable for
-    distinguishing a checkout from an installed appliance package.
-    """
     module_path = Path(__file__).resolve()
     checkout_root = module_path.parents[3]
     source_package = (checkout_root / "src" / "agent").resolve()
@@ -41,8 +28,6 @@ def _is_source_checkout() -> bool:
 
 
 def scan_lock_path() -> Path | None:
-    # Source checkouts have no appliance updater and retain their existing
-    # behavior. Packaged installs provide this fixed-path contract.
     if not LOCK_PATH_FILE.exists():
         if _is_source_checkout():
             return None
@@ -59,11 +44,10 @@ def scan_lock_path() -> Path | None:
 
 
 class UpgradeInProgressError(Exception):
-    """The appliance updater or a stale installation prevents scan admission."""
+    pass
 
 
 class ScanLease:
-    """An acquired scan lease; borrowed users must not close the owner's lease."""
 
     def __init__(self, descriptor: int | None, path: Path | None) -> None:
         self._descriptor = descriptor
@@ -90,8 +74,6 @@ class ScanLease:
 
 
 def _check_update_gate(*, allow_pending_finalization: bool = False) -> None:
-    # Presence is the durable blocked signal. Invalid JSON is also blocking:
-    # scans must not infer that a damaged gate is safe to ignore.
     if UPDATE_GATE_PATH.exists():
         try:
             gate = json.loads(UPDATE_GATE_PATH.read_text(encoding="utf-8"))
@@ -111,9 +93,6 @@ def _check_update_gate(*, allow_pending_finalization: bool = False) -> None:
 
 
 def _check_installation_identity() -> None:
-    # The imported process identity is captured when the agent modules load;
-    # package metadata changes during an update, so stale idle TUI/daemon
-    # processes must not start new scans from an old in-memory code tree.
     from agent.version import PROCESS_START_VERSION, installed_version
 
     try:
@@ -138,7 +117,6 @@ def acquire_scan_lease(*, allow_pending_finalization: bool = False) -> ScanLease
 
     import fcntl
 
-    # Do not create or replace the path: all participants must lock one inode.
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
     descriptor = os.open(path, flags)
     try:
@@ -159,7 +137,6 @@ def acquire_scan_lease(*, allow_pending_finalization: bool = False) -> ScanLease
 
 @contextmanager
 def scan_lock(lease: ScanLease | None = None) -> Iterator[ScanLease]:
-    """Own a new lease, or borrow the explicit lease supplied by an outer flow."""
     if lease is not None:
         if not lease.active:
             raise OSError("Cannot borrow a released scan lease.")

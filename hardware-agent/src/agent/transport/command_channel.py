@@ -431,7 +431,6 @@ class CommandChannelClient:
         while True:
             frame = _parse_command(await self._socket.recv())
             if isinstance(frame, UpdateSession):
-                # A socket cannot change its session after the initial handshake.
                 if frame.session_id != self._session_id:
                     raise OSError("command session changed")
             elif isinstance(frame, ScanStatusAck):
@@ -506,8 +505,6 @@ class CommandChannelClient:
                 "scan_finalization_v1" in self._probe_capabilities
             )
             return self._protocol_supported
-        # Injected websocket connectors are test/local transports and must not
-        # cause an unrelated network request.
         if self._connect is not _default_connect:
             return False
         path = f"/api/v1/agents/{self._device_id}/update-protocol"

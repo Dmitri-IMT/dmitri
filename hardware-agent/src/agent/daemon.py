@@ -336,7 +336,6 @@ class AgentDaemon:
         await self._send(command_id, record)
 
     async def handle_agent_update(self, frame: AgentUpdate) -> None:
-        """Forward one negotiated, current-session update to the companion."""
         if (
             getattr(self._client, "parked_reason", None) is not None
             or not getattr(self._client, "supports_agent_updates", False)
@@ -503,7 +502,6 @@ class AgentDaemon:
                             result_path=checkpoint.result_path,
                         )
                     elif submission.outcome in {"unavailable", "protocol_error"}:
-                        # Preserve the upload checkpoint and artifact for retry.
                         self._schedule_replay_retry()
                         return
                     else:
@@ -766,7 +764,6 @@ class AgentDaemon:
     async def _submit_upload(
         self, payload: object, command_id: UUID, scan_id: UUID
     ) -> SubmissionResult:
-        """Submit once per command while retaining the underlying thread task."""
         key = (command_id, scan_id)
         async with self._upload_lock:
             worker = self._upload_worker
