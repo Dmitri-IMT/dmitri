@@ -5,7 +5,7 @@ from logging.config import fileConfig
 
 from alembic import context
 from api.core.config import normalize_postgres_url
-from api.models import command, identity, persistence  # noqa: F401
+from api.models import command, identity, mcp, persistence  # noqa: F401
 from sqlalchemy import engine_from_config, pool
 
 config = context.config
