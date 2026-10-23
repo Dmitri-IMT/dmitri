@@ -10,8 +10,18 @@ const SEVERITY: Record<string, string> = {
 export const catalog: Catalog = {
   'mcp.title': 'MCP',
   'mcp.description': 'Use suas varreduras no Codex ou Claude Code.',
-  'mcp.scope': ({ organization }) =>
-    `${organization} · Acesso somente de leitura à sua organização`,
+  'mcp.on': 'Ativado',
+  'mcp.off': 'Desativado',
+  'mcp.turnOn': 'Ativar',
+  'mcp.turnOff': 'Desativar',
+  'mcp.turningOff': 'Desativando…',
+  'mcp.configure': 'Configurar',
+  'mcp.close': 'Fechar configuração do MCP',
+  'mcp.turnedOff': 'MCP desativado. Seus assistentes foram desconectados.',
+  'mcp.turnOffError':
+    'Não foi possível desconectar todos os assistentes. Algumas conexões podem continuar com acesso. Tente novamente.',
+  'mcp.turnOffHelp':
+    'Desativar desconecta todos os assistentes da sua conta. Você pode conectar novamente a qualquer momento.',
   'mcp.chooseClient': 'Escolha seu assistente',
   'mcp.addServer': 'Adicione o Dmitri no terminal',
   'mcp.terminalHelp':
@@ -26,7 +36,7 @@ export const catalog: Catalog = {
   'mcp.claudeLoginHelp':
     'Abra o Claude Code, execute /mcp, selecione Dmitri e escolha Authenticate.',
   'mcp.signInHelp':
-    'Entre com sua conta Dmitri. Confira sua organização e aprove o acesso de leitura. Volte aqui para ver sua conexão.',
+    'Entre com sua conta Dmitri. Confira sua organização e aprove o acesso de leitura. O MCP é ativado após a aprovação. Volte aqui para ver sua conexão.',
   'mcp.tryPrompts': 'Depois, pergunte ao assistente',
   'mcp.promptHelp': ({ client }) => `Copie uma pergunta para o ${client}.`,
   'mcp.copyPrompt': ({ prompt }) => `Copiar pergunta: ${prompt}`,

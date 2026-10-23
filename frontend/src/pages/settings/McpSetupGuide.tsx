@@ -35,12 +35,15 @@ export default function McpSetupGuide({ url }: { url: string }) {
           }}
           className="min-w-0 gap-6"
         >
-          <TabsList aria-label={t('mcp.chooseClient')}>
+          <TabsList
+            aria-label={t('mcp.chooseClient')}
+            className="gap-1 border border-input bg-muted group-data-horizontal/tabs:h-auto"
+          >
             {CLIENTS.map((value) => (
               <TabsTrigger
                 key={value}
                 value={value}
-                className="px-4 text-body-sm active:translate-y-px"
+                className="h-9 px-4 text-body-sm active:translate-y-px data-[state=active]:bg-foreground/10 data-[state=active]:font-semibold data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground"
               >
                 {CLIENT_NAMES[value]}
               </TabsTrigger>
@@ -131,12 +134,12 @@ export default function McpSetupGuide({ url }: { url: string }) {
             {t('mcp.promptHelp', { client: CLIENT_NAMES[client] })}
           </p>
         </div>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="flex flex-col gap-3">
           {PROMPTS.map((prompt) => (
             <Button
               key={prompt}
-              variant="ghost"
-              className="h-auto min-w-0 justify-between gap-3 border-b border-rule px-0 py-3 text-left text-body-sm whitespace-normal"
+              variant="outline"
+              className="h-auto min-w-0 justify-between gap-4 border-input bg-card p-4 text-left text-body-sm whitespace-normal"
               aria-label={t('mcp.copyPrompt', {
                 prompt: t(`mcp.prompt.${prompt}`),
               })}

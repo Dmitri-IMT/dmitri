@@ -5,6 +5,14 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-10-23
 
+* **Update**: Removed the MCP setup modal's lock and organization/read-only banner.
+  Selected client tabs now use a soft theme-aware gray fill in light and dark mode.
+
+* **Update**: MCP Settings now uses a compact account row and a shared wide modal
+  for setup, prompts, permissions and connections. Turn off revokes the user's
+  active connections and refreshes state after success or partial failure. Client
+  tabs use Radix's actual selected state; prompt buttons are stacked and padded.
+
 * **Creation**: Added the frontend MCP code-map for inline Settings setup, local
   assistant commands, browser consent, organization scope, and own connections.
 * **Update**: Settings now documents the enabled MCP section with Codex and Claude

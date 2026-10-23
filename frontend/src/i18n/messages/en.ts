@@ -10,8 +10,18 @@ const SEVERITY: Record<string, string> = {
 export const catalog = {
   'mcp.title': 'MCP',
   'mcp.description': 'Use your scans in Codex or Claude Code.',
-  'mcp.scope': ({ organization }) =>
-    `${organization} · Read-only access to your organization`,
+  'mcp.on': 'On',
+  'mcp.off': 'Off',
+  'mcp.turnOn': 'Turn on',
+  'mcp.turnOff': 'Turn off',
+  'mcp.turningOff': 'Turning off…',
+  'mcp.configure': 'Configure',
+  'mcp.close': 'Close MCP setup',
+  'mcp.turnedOff': 'MCP turned off. Your assistants are disconnected.',
+  'mcp.turnOffError':
+    'Could not disconnect every assistant. Some connections may still have access. Try again.',
+  'mcp.turnOffHelp':
+    'Turning off disconnects all assistants for your account. You can connect again at any time.',
   'mcp.chooseClient': 'Choose your assistant',
   'mcp.addServer': 'Add Dmitri in your terminal',
   'mcp.terminalHelp':
@@ -25,7 +35,7 @@ export const catalog = {
   'mcp.claudeLoginHelp':
     'Open Claude Code, run /mcp, select Dmitri, then choose Authenticate.',
   'mcp.signInHelp':
-    'Sign in with your Dmitri account. Check your organization, then approve read access. Return here to see your connection.',
+    'Sign in with your Dmitri account. Check your organization, then approve read access. MCP turns on after approval. Return here to see your connection.',
   'mcp.tryPrompts': 'Then, ask your assistant',
   'mcp.promptHelp': ({ client }) => `Copy a prompt into ${client}.`,
   'mcp.copyPrompt': ({ prompt }) => `Copy prompt: ${prompt}`,

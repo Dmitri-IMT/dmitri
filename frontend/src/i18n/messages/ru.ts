@@ -10,8 +10,18 @@ const SEVERITY: Record<string, string> = {
 export const catalog: Catalog = {
   'mcp.title': 'MCP',
   'mcp.description': 'Используйте свои сканирования в Codex или Claude Code.',
-  'mcp.scope': ({ organization }) =>
-    `${organization} · Доступ к данным вашей организации только для чтения`,
+  'mcp.on': 'Включён',
+  'mcp.off': 'Выключен',
+  'mcp.turnOn': 'Включить',
+  'mcp.turnOff': 'Выключить',
+  'mcp.turningOff': 'Выключение…',
+  'mcp.configure': 'Настроить',
+  'mcp.close': 'Закрыть настройку MCP',
+  'mcp.turnedOff': 'MCP выключен. Ваши ассистенты отключены.',
+  'mcp.turnOffError':
+    'Не удалось отключить всех ассистентов. Некоторые подключения могут сохранить доступ. Повторите попытку.',
+  'mcp.turnOffHelp':
+    'Выключение отключает всех ассистентов вашей учётной записи. Вы можете подключить их снова в любое время.',
   'mcp.chooseClient': 'Выберите ассистента',
   'mcp.addServer': 'Добавьте Dmitri в терминале',
   'mcp.terminalHelp':
@@ -26,7 +36,7 @@ export const catalog: Catalog = {
   'mcp.claudeLoginHelp':
     'Откройте Claude Code, выполните /mcp, выберите Dmitri, затем Authenticate.',
   'mcp.signInHelp':
-    'Войдите в свою учётную запись Dmitri. Проверьте организацию и разрешите чтение. Вернитесь сюда, чтобы увидеть подключение.',
+    'Войдите в свою учётную запись Dmitri. Проверьте организацию и разрешите чтение. MCP включится после подтверждения. Вернитесь сюда, чтобы увидеть подключение.',
   'mcp.tryPrompts': 'Затем спросите ассистента',
   'mcp.promptHelp': ({ client }) => `Скопируйте запрос в ${client}.`,
   'mcp.copyPrompt': ({ prompt }) => `Скопировать запрос: ${prompt}`,

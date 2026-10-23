@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/setup'
@@ -32,7 +32,42 @@ function enableMcp() {
 
 afterEach(() => vi.restoreAllMocks())
 
+async function openSetup() {
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: /^(Turn on|Configure)$/ }),
+    ).toBeEnabled(),
+  )
+  await userEvent.click(
+    screen.getByRole('button', { name: /^(Turn on|Configure)$/ }),
+  )
+}
+
 describe('MCP connections', () => {
+  it('opens setup from Turn on without granting access and restores focus on close', async () => {
+    enableMcp()
+    const user = userEvent.setup()
+    renderWithProviders(<McpConnectionsPanel />)
+    const opener = await screen.findByRole('button', { name: 'Turn on' })
+    await waitFor(() => expect(opener).toBeEnabled())
+    expect(
+      within(screen.getByTestId('mcp-connections')).getByRole('status'),
+    ).toHaveTextContent('Off')
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
+    await user.click(opener)
+    expect(screen.getByRole('dialog', { name: 'MCP' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Close MCP setup' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(opener).toHaveFocus()
+    expect(
+      within(screen.getByTestId('mcp-connections')).getByRole('status'),
+    ).toHaveTextContent('Off')
+    await user.click(opener)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(opener).toHaveFocus()
+  })
+
   it('shows the MCP guide and copies commands for the configured server', async () => {
     enableMcp()
     const user = userEvent.setup()
@@ -40,11 +75,9 @@ describe('MCP connections', () => {
     renderWithProviders(<McpConnectionsPanel />)
 
     expect(await screen.findByRole('heading', { name: 'MCP' })).toBeVisible()
-    expect(
-      await screen.findByText(
-        'Acme Corp · Read-only access to your organization',
-      ),
-    ).toBeVisible()
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await openSetup()
     await user.click(
       screen.getByRole('button', { name: 'Copy add-server command' }),
     )
@@ -93,6 +126,7 @@ describe('MCP connections', () => {
     const user = userEvent.setup()
     const writeText = vi.spyOn(navigator.clipboard, 'writeText')
     renderWithProviders(<McpConnectionsPanel />)
+    await openSetup()
     await user.click(
       await screen.findByRole('button', { name: `Copy prompt: ${label}` }),
     )
@@ -114,6 +148,7 @@ describe('MCP connections', () => {
       new Error('Denied'),
     )
     renderWithProviders(<McpConnectionsPanel />)
+    await openSetup()
     await user.click(
       await screen.findByRole('button', { name: 'Copy add-server command' }),
     )
@@ -132,6 +167,7 @@ describe('MCP connections', () => {
       http.get(`${baseURL}/users/me`, () => HttpResponse.json(viewerProfile)),
     )
     renderWithProviders(<McpConnectionsPanel />)
+    await openSetup()
     expect(
       await screen.findByText(/Your NSPi does not need to be online/),
     ).toBeVisible()
@@ -198,6 +234,7 @@ describe('MCP connections', () => {
     )
     renderWithProviders(<McpConnectionsPanel />)
     const user = userEvent.setup()
+    await openSetup()
     await user.click(
       await screen.findByRole('button', {
         name: 'Disconnect Local Claude Code',
@@ -229,6 +266,7 @@ describe('MCP connections', () => {
       ),
     )
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    await openSetup()
     await waitFor(() =>
       expect(screen.getByText('No assistants connected.')).toBeVisible(),
     )
@@ -246,6 +284,7 @@ describe('MCP connections', () => {
       ),
     )
     renderWithProviders(<McpConnectionsPanel />)
+    await openSetup()
     await userEvent.click(
       await screen.findByRole('button', {
         name: 'Disconnect Local Claude Code',
@@ -258,5 +297,100 @@ describe('MCP connections', () => {
     expect(screen.getByTestId('mcp-connections')).not.toHaveTextContent(
       "Couldn't disconnect that assistant.",
     )
+  })
+
+  it('turns off every active connection for this account', async () => {
+    enableMcp()
+    const second = {
+      ...connection,
+      id: '223e4567-e89b-12d3-a456-426614174000',
+      client_name: 'Codex',
+    }
+    let active = [connection, second]
+    const deleted: string[] = []
+    server.use(
+      http.get(`${baseURL}/mcp/connections`, () =>
+        HttpResponse.json({ data: active }),
+      ),
+      http.delete(`${baseURL}/mcp/connections/:id`, ({ params }) => {
+        deleted.push(String(params.id))
+        active = active.filter((entry) => entry.id !== params.id)
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    renderWithProviders(<McpConnectionsPanel />)
+    const user = userEvent.setup()
+    expect(
+      await screen.findByRole('button', { name: 'Configure' }),
+    ).toBeVisible()
+    expect(
+      within(screen.getByTestId('mcp-connections')).getByRole('status'),
+    ).toHaveTextContent('On')
+    await user.click(screen.getByRole('button', { name: 'Turn off' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Turn on' })).toBeEnabled(),
+    )
+    expect(deleted.sort()).toEqual([connection.id, second.id].sort())
+    expect(
+      within(screen.getByTestId('mcp-connections')).getByRole('status'),
+    ).toHaveTextContent('Off')
+    expect(
+      screen.queryByRole('button', { name: 'Configure' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('toast')).toHaveTextContent(
+      'MCP turned off.',
+    )
+  })
+
+  it('refreshes the true state and allows retry when turning off only partly succeeds', async () => {
+    enableMcp()
+    const second = {
+      ...connection,
+      id: '223e4567-e89b-12d3-a456-426614174000',
+      client_name: 'Codex',
+    }
+    let active = [connection, second]
+    let fail = true
+    const deleted: string[] = []
+    server.use(
+      http.get(`${baseURL}/mcp/connections`, () =>
+        HttpResponse.json({ data: active }),
+      ),
+      http.delete(`${baseURL}/mcp/connections/:id`, ({ params }) => {
+        if (params.id === second.id && fail)
+          return new HttpResponse(null, { status: 503 })
+        deleted.push(String(params.id))
+        active = active.filter((entry) => entry.id !== params.id)
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    renderWithProviders(<McpConnectionsPanel />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Turn off' }))
+    expect(await screen.findByTestId('toast')).toHaveTextContent(
+      'Could not disconnect every assistant.',
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Turn off' })).toBeEnabled(),
+    )
+    expect(
+      within(screen.getByTestId('mcp-connections')).getByRole('status'),
+    ).toHaveTextContent('On')
+    await openSetup()
+    expect(
+      screen.getByRole('button', { name: 'Disconnect Codex' }),
+    ).toBeVisible()
+    expect(screen.queryByText('Local Claude Code')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Close MCP setup' }))
+    fail = false
+    await user.click(screen.getByRole('button', { name: 'Turn off' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Turn on' })).toBeEnabled(),
+    )
+    expect(
+      within(screen.getByTestId('mcp-connections')).getByRole('status'),
+    ).toHaveTextContent('Off')
+    expect(deleted).toEqual([connection.id, second.id])
   })
 })

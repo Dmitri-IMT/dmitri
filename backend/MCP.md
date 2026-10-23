@@ -42,11 +42,13 @@ organization and local client, and approve read access.
 Try: "Show the machines and Modbus observations in my latest NSPi scan. Cite
 the scan and state any evidence or coverage gaps."
 
-When enabled, **Settings → MCP** shows the configured endpoint in copyable Codex
-and Claude Code commands, browser sign-in steps, example prompts, and the signed-in
-user's connections. The guide uses the current organization from the user profile
-and explains read-only access and model-provider data sharing. Disconnecting a
-listed connection revokes its future access.
+When enabled, **Settings → MCP** shows a compact account control. **Turn on** opens
+the setup modal with the configured endpoint in copyable Codex and Claude Code
+commands, browser sign-in steps, example prompts, permissions, and the signed-in
+user's connections. **Configure** reopens it while connected. The On/Off state
+reflects actual active connections; access starts only after browser approval.
+**Turn off** revokes all current connections for that account, with a retry if
+some revocations fail. It does not disable the deployment endpoint or other users.
 
 ## Production activation
 
