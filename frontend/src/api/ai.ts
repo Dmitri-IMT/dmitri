@@ -3,9 +3,11 @@ import type { components } from '../types/openapi'
 
 export type AIContextScope = 'scan' | 'host' | 'finding'
 export type AILanguage = 'en' | 'pt-BR' | 'ru'
-export type AIChatResponse = components['schemas']['AIChatResponse']
 export type AIChatHistoryResponse =
   components['schemas']['AIChatHistoryResponse']
+export type AIChatHistoryEntry = components['schemas']['AIChatHistoryEntry']
+export type AIConversationsResponse =
+  components['schemas']['AIConversationsResponse']
 export type AIUsageResponse = components['schemas']['AIUsageResponse']
 
 export async function getAIUsage(limit = 50): Promise<AIUsageResponse> {
@@ -22,14 +24,16 @@ export async function askContextAI(
   question: string,
   language: AILanguage = 'en',
   signal?: AbortSignal,
-): Promise<AIChatResponse> {
-  const response = await apiClient.post<AIChatResponse>(
+  conversationId?: string,
+): Promise<AIChatHistoryEntry> {
+  const response = await apiClient.post<AIChatHistoryEntry>(
     '/ai/chat',
     {
       scope,
       context_id: contextId,
       question,
       language,
+      conversation_id: conversationId,
     },
     { signal },
   )
@@ -39,11 +43,32 @@ export async function askContextAI(
 export async function getContextAIHistory(
   scope: AIContextScope,
   contextId: string,
+  conversationId?: string,
+  page = 1,
 ): Promise<AIChatHistoryResponse> {
   const response = await apiClient.get<AIChatHistoryResponse>(
     '/ai/chat/history',
     {
-      params: { scope, context_id: contextId },
+      params: {
+        scope,
+        context_id: contextId,
+        conversation_id: conversationId,
+        page,
+      },
+    },
+  )
+  return response.data
+}
+
+export async function getAIConversations(
+  scope: AIContextScope,
+  contextId: string,
+  page = 1,
+): Promise<AIConversationsResponse> {
+  const response = await apiClient.get<AIConversationsResponse>(
+    '/ai/chat/conversations',
+    {
+      params: { scope, context_id: contextId, page },
     },
   )
   return response.data

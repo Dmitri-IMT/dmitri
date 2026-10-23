@@ -4,7 +4,7 @@ title: Backend AI — fix tasks, explanations, chat and usage
 description: OpenAI Responses integration for researched scan fix tasks, cached structured scan/machine explanations, web-assisted contextual chat and scoped usage metadata.
 resource: backend/src/api/services/ai/jobs.py
 tags: [backend, ai, openai, worker, scans, chat, telemetry]
-timestamp: 2026-10-23T00:00:00Z
+timestamp: 2026-10-23T14:36:51Z
 ---
 
 # Backend AI — fix tasks, explanations, chat and usage
@@ -27,7 +27,9 @@ The R3 research cache supplies checked source URLs for fix tasks. Chat can searc
 | `explanation_context` | Authorizes completed scan or latest host context; builds anonymous facts and language-specific allowed count lead-ins. |
 | `materialize_explanation` | Checks prose, count lead-ins, duplicates and reference grounding; scrubs credentials and restores display references locally. |
 | `explain_context` route | POST `/api/v1/ai/explain`; cached structured output or synchronous provider call. |
-| `ask_context_chat` route | POST `/api/v1/ai/chat`; scoped question with secret/address scrubbing and checked citations. |
+| `ask_context_chat` route | POST `/api/v1/ai/chat`; scoped question with secret/address scrubbing and checked citations; returns the saved message and conversation IDs. |
+| `list_context_conversations` route | GET `/api/v1/ai/chat/conversations`; private, contextual conversation titles and timestamps, 50 per page. |
+| `list_context_chat` route | GET `/api/v1/ai/chat/history`; private messages for a conversation, newest page first with chronological entries. |
 | `persist_usage_events` | Saves operational metadata only, including failures; never saves prompts in ai_usage. |
 
 ## How it connects
@@ -35,6 +37,13 @@ The R3 research cache supplies checked source URLs for fix tasks. Chat can searc
 - `ai_explanations` has unique `(scope, context_id, language, prompt_version)` and a scan
   foreign key. Each cache read first resolves organisation ownership. Host cache entries
   refresh when the latest scan ID changes.
+- A transaction-scoped PostgreSQL advisory lock serializes explanation generation for each
+  context/language/prompt version. Cached reads skip anonymous model-context construction.
+- Chat messages have a `conversation_id`; the API checks ownership and context before reuse.
+  Saved messages are retained, rather than deleting everything after ten entries. Message and
+  conversation reads page in batches of 50 and filter by both organisation and caller.
+- Migration `20261024_48` groups existing transcripts by caller/context and adds the indexed,
+  non-null conversation ID without deleting messages.
 - `explain_scan`, `explain_host` and `chat` share `AI_CHAT_DAILY_LIMIT`, counted per user
   over the last 24 hours. Cached explanations do not consume another call.
 - Scan and machine deletion remove their cached explanations. Migration `20261024_47`

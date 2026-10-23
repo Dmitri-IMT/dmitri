@@ -112,7 +112,11 @@ SCHEMA_NAMES = (
     "ReportFinding",
     "ReportAction",
     "ReportSource",
-    "AIChatResponse",
+    "AIChatHistoryEntry",
+    "AIChatHistoryResponse",
+    "AIConversationSummary",
+    "AIConversationsResponse",
+    "AIContextChatRequest",
     "ScanDeletionResponse",
     "HostDeletionResponse",
 )

@@ -179,6 +179,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/chat/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Context Conversations */
+        get: operations["listAIConversations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/chat/history": {
         parameters: {
             query?: never;
@@ -186,7 +203,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List contextual AI chat history */
+        /** List Context Chat */
         get: operations["listContextAIChat"];
         put?: never;
         post?: never;
@@ -222,7 +239,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Ask the contextual AI assistant */
+        /** Ask Context Chat */
         post: operations["askContextAI"];
         delete?: never;
         options?: never;
@@ -2537,32 +2554,67 @@ export interface components {
             /** Sections */
             sections: components["schemas"]["ExplainedReportSections"] | components["schemas"]["TechnicalReportSections"];
         };
+        /**
+         * AIContextChatRequest
+         * @description Question addressed to a reusable UI context (scan, host or finding).
+         */
         AIContextChatRequest: {
+            /** Question */
             question: string;
             /**
+             * Language
              * @default en
              * @enum {string}
              */
             language: "en" | "pt-BR" | "ru";
-            /** @enum {string} */
+            /**
+             * Scope
+             * @enum {string}
+             */
             scope: "scan" | "host" | "finding";
-            /** Format: uuid */
+            /**
+             * Context Id
+             * Format: uuid
+             */
             context_id: string;
+            /** Conversation Id */
+            conversation_id?: string | null;
         };
-        AIChatResponse: {
+        /** AIChatHistoryEntry */
+        AIChatHistoryEntry: {
+            /** Answer */
             answer: string;
+            /** Uncertainties */
             uncertainties: string[];
+            /** Referenced Finding Ids */
             referenced_finding_ids: string[];
-        };
-        AIChatHistoryEntry: components["schemas"]["AIChatResponse"] & {
-            /** Format: uuid */
+            /**
+             * Message Id
+             * Format: uuid
+             */
             message_id: string;
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /** Question */
             question: string;
-            /** Format: date-time */
+            /**
+             * Created At
+             * Format: date-time
+             */
             created_at: string;
         };
+        /** AIChatHistoryResponse */
         AIChatHistoryResponse: {
+            /** Data */
             data: components["schemas"]["AIChatHistoryEntry"][];
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
         };
         AIUsageEntry: {
             operation: string;
@@ -2915,6 +2967,28 @@ export interface components {
              */
             scope: "host";
             explanation: components["schemas"]["MachineExplanation"];
+        };
+        /** AIConversationSummary */
+        AIConversationSummary: {
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** AIConversationsResponse */
+        AIConversationsResponse: {
+            /** Data */
+            data: components["schemas"]["AIConversationSummary"][];
+            /** Has More */
+            has_more: boolean;
         };
     };
     responses: {
@@ -3856,11 +3930,12 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
-    listContextAIChat: {
+    listAIConversations: {
         parameters: {
             query: {
-                scope: "scan" | "host" | "finding";
+                scope: string;
                 context_id: string;
+                page?: number;
             };
             header?: never;
             path?: never;
@@ -3868,7 +3943,59 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Last ten questions for the selected context. */
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIConversationsResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listContextAIChat: {
+        parameters: {
+            query: {
+                scope: string;
+                context_id: string;
+                conversation_id?: string | null;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3877,8 +4004,33 @@ export interface operations {
                     "application/json": components["schemas"]["AIChatHistoryResponse"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     explainAIContext: {
@@ -3956,18 +4108,34 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Grounded answer for the selected context. */
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AIChatResponse"];
+                    "application/json": components["schemas"]["AIChatHistoryEntry"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            /** @description Context exceeds the provider limit. */
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Context too large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -3976,7 +4144,16 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description AI provider rate limit reached. */
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Rate limited */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3985,7 +4162,24 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            502: components["responses"]["InternalServerError"];
+            /** @description Provider error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description AI unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     downloadScanReport: {

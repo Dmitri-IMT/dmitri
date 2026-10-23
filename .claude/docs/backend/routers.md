@@ -4,7 +4,7 @@ title: Backend routers — reads, identity admin, ingest and commands
 description: The FastAPI read, identity admin, device revoke/restore, scan/machine deletion, ingest and command-channel HTTP/WS routers with their auth gates.
 resource: backend/src/api/routers
 tags: [backend, fastapi, routers, read, ingest, auth, tenancy, websocket, command-channel, identity-admin, agents]
-timestamp: 2026-10-13T00:00:00Z
+timestamp: 2026-10-23T14:36:51Z
 ---
 
 # Backend routers — reads, identity admin, ingest and commands
@@ -36,7 +36,7 @@ service, so the tenant boundary is enforced in SQL rather than in the handler. R
 | `request_scan_ai_analysis_route()` | `POST /api/v1/scans/{scan_id}/analysis` (`requestScanAIAnalysis`, 202), same `?language=`. `409` if already requested for that language. | `backend/src/api/routers/scans.py:185` |
 | `read_scan_report()` / `download_scan_report()` | `GET /api/v1/scans/{scan_id}/reports/{kind}` and `/download` (PDF), both with `?language=`. | `backend/src/api/routers/scans.py:305`, `:338` |
 | `get_ai_usage()` | `GET /api/v1/ai/usage` (`getAIUsage`) — org-scoped summary + recent rows. | `backend/src/api/routers/ai.py:50` |
-| `list_context_chat()` / `ask_context_chat()` | `GET`/`POST /api/v1/ai/chat/history` and `/api/v1/ai/chat` with `scope` `scan`/`host`/`finding`. The **only** AI question route: the per-resource `/scans/{id}/chat` and `/{hosts,findings}/{id}/explain` routes were deleted in PR #151. POST writes the usage rows and the transcript in one commit; on a provider failure the usage rows are committed alone, because the tokens were spent. | `backend/src/api/routers/ai.py:112`, `:132` |
+| `list_context_chat()` / `list_context_conversations()` / `ask_context_chat()` | Private paginated `GET /api/v1/ai/chat/history` and `/ai/chat/conversations`; `POST /api/v1/ai/chat` returns its saved message and conversation IDs. Scope is `scan`/`host`/`finding`. POST writes usage and transcript in one commit; provider failures commit usage alone. | `backend/src/api/routers/ai.py:135`, `:166`, `:186` |
 | `read_findings()` | `GET /api/v1/findings` (optional `page`, `per_page`, `severity`, `scan_id`, `host_id`) → `list_findings(...)` → `FindingListResponse`. Foreign ids → empty page, not 404. | `backend/src/api/routers/findings.py:18` |
 | `read_home()` | `GET /api/v1/home` behind `require_user`. Three `Query(1, ge=1)` page integers, no `per_page`. Returns `HomeSnapshot`. Viewers are allowed. | `backend/src/api/routers/home.py:15` |
 | `read_current_user()` | `GET /api/v1/users/me` → caller profile (`user_id`, `email`, `role`, `org_name`), with role loaded from the DB row by `require_user_row` and `org_name` from the caller's `Org` row (the SPA's typed confirmation for "delete all" compares against it). | `backend/src/api/routers/users.py:44` |

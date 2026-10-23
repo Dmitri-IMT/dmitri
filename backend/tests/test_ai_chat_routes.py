@@ -414,3 +414,132 @@ def test_context_chat_removes_secrets_before_the_provider_and_history(
     assert received == ["my password: [removed] on [removed]"]
     saved = administrative_session.exec(select(AIChatMessageRecord)).one()
     assert saved.question == "my password: [removed] on [removed]"
+
+
+def test_conversations_survive_new_chat_and_keep_messages_after_ten(
+    client, administrative_session, actor_headers, monkeypatch,
+):
+    from uuid import uuid4
+
+    seeded = seed_read_graph(administrative_session)
+    headers = actor_headers(seeded['org'].id, 'viewer')
+    _enable_ai(monkeypatch)
+    monkeypatch.setattr(
+        'api.routers.ai.build_ai_provider', lambda settings: _FakeProvider()
+    )
+    first_id, second_id = uuid4(), uuid4()
+    try:
+        for index in range(12):
+            result = client.post('/api/v1/ai/chat', json={
+                'scope': 'scan', 'context_id': str(seeded['scan'].scan_id),
+                'question': 'o que devo corrigir?', 'conversation_id': str(first_id),
+            }, headers=headers)
+            assert result.status_code == 200, result.text
+            assert result.json()['conversation_id'] == str(first_id)
+        result = client.post('/api/v1/ai/chat', json={
+            'scope': 'scan', 'context_id': str(seeded['scan'].scan_id),
+            'question': 'o que devo corrigir?', 'conversation_id': str(second_id),
+        }, headers=headers)
+        assert result.status_code == 200
+        params = {'scope': 'scan', 'context_id': str(seeded['scan'].scan_id)}
+        chats = client.get(
+            '/api/v1/ai/chat/conversations', params=params, headers=headers
+        )
+        assert chats.status_code == 200
+        assert [chat['conversation_id'] for chat in chats.json()['data']] == [
+            str(second_id), str(first_id),
+        ]
+        history = client.get('/api/v1/ai/chat/history', params={
+            **params, 'conversation_id': str(first_id),
+        }, headers=headers)
+        assert len(history.json()['data']) == 12
+        assert len(administrative_session.exec(select(AIChatMessageRecord)).all()) == 13
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+
+def test_conversations_are_private_and_cannot_be_reused_in_another_context(
+    client, administrative_session, actor_headers, monkeypatch,
+):
+    from uuid import uuid4
+
+    seeded = seed_read_graph(administrative_session)
+    headers = actor_headers(seeded['org'].id, 'viewer')
+    _enable_ai(monkeypatch)
+    monkeypatch.setattr(
+        'api.routers.ai.build_ai_provider', lambda settings: _FakeProvider()
+    )
+    conversation_id = str(uuid4())
+    payload = {'scope': 'scan', 'context_id': str(seeded['scan'].scan_id),
+               'question': 'o que devo corrigir?', 'conversation_id': conversation_id}
+    try:
+        saved = client.post('/api/v1/ai/chat', json=payload, headers=headers)
+        assert saved.status_code == 200
+        other_user = actor_headers(seeded['org'].id, 'admin')
+        params = {'scope': 'scan', 'context_id': payload['context_id']}
+        assert client.get('/api/v1/ai/chat/conversations', params=params,
+                          headers=other_user).json()['data'] == []
+        assert client.get('/api/v1/ai/chat/history', params={
+            **params, 'conversation_id': conversation_id,
+        }, headers=other_user).json()['data'] == []
+        assert client.post('/api/v1/ai/chat', json=payload,
+                           headers=other_user).status_code == 404
+        assert client.post('/api/v1/ai/chat', json={
+            **payload, 'scope': 'host', 'context_id': str(seeded['host'].id),
+        }, headers=headers).status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+
+def test_long_saved_chats_and_conversation_list_are_paginated_without_deletion(
+    client, administrative_session, actor_headers,
+):
+    from datetime import datetime, timedelta, timezone
+    from uuid import uuid4
+
+    seeded = seed_read_graph(administrative_session)
+    headers = actor_headers(seeded['org'].id, 'viewer')
+    user = administrative_session.exec(
+        select(User).where(User.org_id == seeded['org'].id)
+    ).one()
+    conversation_id = uuid4()
+    start = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    messages = [AIChatMessageRecord(
+        scan_id=seeded['scan'].scan_id, user_id=user.id,
+        scope_type='scan', scope_id=seeded['scan'].scan_id,
+        conversation_id=conversation_id,
+        question=f'Question {index:02}', answer='A saved answer.',
+        created_at=start + timedelta(seconds=index),
+    ) for index in range(60)]
+    messages.extend(AIChatMessageRecord(
+        scan_id=seeded['scan'].scan_id, user_id=user.id,
+        scope_type='scan', scope_id=seeded['scan'].scan_id,
+        question=f'Another chat {index}', answer='Another saved answer.',
+        created_at=start - timedelta(minutes=index + 1),
+    ) for index in range(52))
+    administrative_session.add_all(messages)
+    administrative_session.commit()
+    params = {'scope': 'scan', 'context_id': str(seeded['scan'].scan_id)}
+    first = client.get('/api/v1/ai/chat/conversations', params=params, headers=headers)
+    second = client.get('/api/v1/ai/chat/conversations', params={
+        **params, 'page': 2,
+    }, headers=headers)
+    assert len(first.json()['data']) == 50
+    assert first.json()['has_more'] is True
+    assert first.json()['data'][0]['title'] == 'Question 00'
+    assert len(second.json()['data']) == 3
+    assert second.json()['has_more'] is False
+    params['conversation_id'] = str(conversation_id)
+    first = client.get('/api/v1/ai/chat/history', params=params, headers=headers)
+    second = client.get('/api/v1/ai/chat/history', params={
+        **params, 'page': 2,
+    }, headers=headers)
+    assert first.json()['has_more'] is True
+    assert [item['question'] for item in first.json()['data']] == [
+        f'Question {index:02}' for index in range(10, 60)
+    ]
+    assert second.json()['has_more'] is False
+    assert [item['question'] for item in second.json()['data']] == [
+        f'Question {index:02}' for index in range(10)
+    ]
+    assert len(administrative_session.exec(select(AIChatMessageRecord)).all()) == 112

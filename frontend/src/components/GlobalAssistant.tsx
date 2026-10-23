@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router'
-import { BotIcon } from 'lucide-react'
+import { BotIcon, XIcon } from 'lucide-react'
 import ContextChat from '@/components/ContextChat'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
+  DialogClose,
   DialogTitle,
   DialogTrigger,
   DialogDescription,
@@ -16,6 +16,9 @@ import useI18n from '@/i18n/useI18n'
 function GlobalAssistant() {
   const location = useLocation()
   const [open, setOpen] = useState(false)
+  const [conversations, setConversations] = useState<
+    Record<string, string | null>
+  >({})
   const { t } = useI18n()
   const context = useMemo(() => {
     const scan = location.pathname.match(/^\/scans\/([^/]+)$/)
@@ -23,23 +26,22 @@ function GlobalAssistant() {
       return {
         scope: 'scan' as const,
         contextId: scan[1],
-        label: t('ai.thisScan'),
       }
     const host = location.pathname.match(/^\/network\/([^/]+)$/)
     if (host)
       return {
         scope: 'host' as const,
         contextId: host[1],
-        label: t('ai.thisHost'),
       }
     return null
-  }, [location.pathname, t])
+  }, [location.pathname])
   useEffect(() => {
     const show = () => setOpen(true)
     window.addEventListener('dmitri:assistant-open', show)
     return () => window.removeEventListener('dmitri:assistant-open', show)
   }, [])
   if (!context) return null
+  const contextKey = `${context.scope}:${context.contextId}`
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -52,19 +54,37 @@ function GlobalAssistant() {
           {t('ai.assistant')}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-assistant-dialog overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-title-sm">
-            {t('ai.askDmitri')}
-          </DialogTitle>
-          <DialogDescription className="text-caption-md text-ink-muted">
-            {t('assistant.about', { label: context.label })}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent
+        showCloseButton={false}
+        className="flex h-160 max-h-assistant-dialog flex-col gap-0 overflow-hidden p-0 text-body-md sm:max-w-2xl"
+      >
+        <DialogDescription className="sr-only">
+          {t('assistant.empty')}
+        </DialogDescription>
         <ContextChat
-          key={`${context.scope}:${context.contextId}`}
+          key={contextKey}
           scope={context.scope}
           contextId={context.contextId}
+          conversationId={conversations[contextKey] ?? null}
+          onConversationChange={(id) =>
+            setConversations((current) => ({ ...current, [contextKey]: id }))
+          }
+          heading={
+            <DialogTitle className="text-title-sm">
+              {t('ai.askDmitri')}
+            </DialogTitle>
+          }
+          closeButton={
+            <DialogClose asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t('common.close')}
+              >
+                <XIcon aria-hidden="true" />
+              </Button>
+            </DialogClose>
+          }
           compact
           questionPlaceholder={t('ai.placeholder')}
         />

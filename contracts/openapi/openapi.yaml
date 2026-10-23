@@ -559,38 +559,127 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/ai/chat/history:
+  /api/v1/ai/chat/conversations:
     get:
-      tags:
-        - ai
-      summary: List contextual AI chat history
-      operationId: listContextAIChat
+      summary: List Context Conversations
+      operationId: listAIConversations
       security:
-        - FrontendBearerAuth: []
+      - FrontendBearerAuth: []
       parameters:
-        - name: scope
-          in: query
-          required: true
-          schema:
-            type: string
-            enum: [scan, host, finding]
-        - name: context_id
-          in: query
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: scope
+        in: query
+        required: true
+        schema:
+          type: string
+          pattern: ^(scan|host|finding)$
+          title: Scope
+      - name: context_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Context Id
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
       responses:
         '200':
-          description: Last ten questions for the selected context.
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIConversationsResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      tags:
+      - ai
+  /api/v1/ai/chat/history:
+    get:
+      summary: List Context Chat
+      operationId: listContextAIChat
+      security:
+      - FrontendBearerAuth: []
+      parameters:
+      - name: scope
+        in: query
+        required: true
+        schema:
+          type: string
+          pattern: ^(scan|host|finding)$
+          title: Scope
+      - name: context_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Context Id
+      - name: conversation_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Conversation Id
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      responses:
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AIChatHistoryResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
-          $ref: '#/components/responses/NotFound'
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      tags:
+      - ai
   /api/v1/ai/explain:
     post:
       summary: Explain Context
@@ -650,44 +739,67 @@ paths:
       - ai
   /api/v1/ai/chat:
     post:
-      tags:
-        - ai
-      summary: Ask the contextual AI assistant
+      summary: Ask Context Chat
       operationId: askContextAI
-      security:
-        - FrontendBearerAuth: []
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/AIContextChatRequest'
+        required: true
       responses:
         '200':
-          description: Grounded answer for the selected context.
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AIChatResponse'
+                $ref: '#/components/schemas/AIChatHistoryEntry'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
-          $ref: '#/components/responses/NotFound'
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '413':
-          description: Context exceeds the provider limit.
+          description: Context too large
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '429':
-          description: AI provider rate limit reached.
+          description: Rate limited
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '502':
-          $ref: '#/components/responses/InternalServerError'
-
+          description: Provider error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: AI unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - FrontendBearerAuth: []
+      tags:
+      - ai
   /api/v1/scans/{scan_id}/reports/{kind}/download:
     get:
       tags:
@@ -7361,72 +7473,111 @@ components:
       - sections
       title: ScanReportResponse
     AIContextChatRequest:
-      type: object
-      additionalProperties: false
-      required: [question, scope, context_id]
       properties:
         question:
           type: string
-          minLength: 3
           maxLength: 1000
+          minLength: 3
+          title: Question
         language:
           type: string
-          enum: [en, pt-BR, ru]
+          enum:
+          - en
+          - pt-BR
+          - ru
+          title: Language
           default: en
         scope:
           type: string
-          enum: [scan, host, finding]
+          enum:
+          - scan
+          - host
+          - finding
+          title: Scope
         context_id:
           type: string
           format: uuid
-    AIChatResponse:
-      type: object
+          title: Context Id
+        conversation_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Conversation Id
       additionalProperties: false
-      required: [answer, uncertainties, referenced_finding_ids]
+      type: object
+      required:
+      - question
+      - scope
+      - context_id
+      title: AIContextChatRequest
+      description: Question addressed to a reusable UI context (scan, host or finding).
+    AIChatHistoryEntry:
       properties:
         answer:
           type: string
-          minLength: 3
           maxLength: 8000
+          minLength: 3
+          title: Answer
         uncertainties:
-          type: array
-          maxItems: 10
           items:
             type: string
-            minLength: 3
             maxLength: 2000
-        referenced_finding_ids:
+            minLength: 3
           type: array
-          maxItems: 15
+          maxItems: 10
+          title: Uncertainties
+        referenced_finding_ids:
           items:
             type: string
             format: uuid
-    AIChatHistoryEntry:
-      allOf:
-        - $ref: '#/components/schemas/AIChatResponse'
-        - type: object
-          additionalProperties: false
-          required: [message_id, question, created_at]
-          properties:
-            message_id:
-              type: string
-              format: uuid
-            question:
-              type: string
-              minLength: 3
-              maxLength: 2000
-            created_at:
-              type: string
-              format: date-time
-    AIChatHistoryResponse:
-      type: object
+          type: array
+          maxItems: 15
+          title: Referenced Finding Ids
+        message_id:
+          type: string
+          format: uuid
+          title: Message Id
+        conversation_id:
+          type: string
+          format: uuid
+          title: Conversation Id
+        question:
+          type: string
+          maxLength: 2000
+          minLength: 3
+          title: Question
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
       additionalProperties: false
-      required: [data]
+      type: object
+      required:
+      - answer
+      - uncertainties
+      - referenced_finding_ids
+      - message_id
+      - conversation_id
+      - question
+      - created_at
+      title: AIChatHistoryEntry
+    AIChatHistoryResponse:
       properties:
         data:
-          type: array
           items:
             $ref: '#/components/schemas/AIChatHistoryEntry'
+          type: array
+          title: Data
+        has_more:
+          type: boolean
+          title: Has More
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - data
+      title: AIChatHistoryResponse
     AIUsageEntry:
       type: object
       additionalProperties: false
@@ -8227,3 +8378,39 @@ components:
       - scope
       - explanation
       title: MachineExplanationResponse
+
+    AIConversationSummary:
+      properties:
+        conversation_id:
+          type: string
+          format: uuid
+          title: Conversation Id
+        title:
+          type: string
+          title: Title
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      type: object
+      required:
+      - conversation_id
+      - title
+      - updated_at
+      title: AIConversationSummary
+
+    AIConversationsResponse:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/AIConversationSummary'
+          type: array
+          title: Data
+        has_more:
+          type: boolean
+          title: Has More
+      type: object
+      required:
+      - data
+      - has_more
+      title: AIConversationsResponse

@@ -31,11 +31,17 @@ describe('ContextChat', () => {
   })
 
   it('removes the one-shot ask button once it has an answer, so it cannot be asked again', async () => {
-    vi.mocked(askContextAI).mockResolvedValue({
-      answer: 'It is fine.',
-      uncertainties: [],
-      referenced_finding_ids: [],
-    })
+    vi.mocked(askContextAI).mockImplementation(
+      async (_scope, _id, _question, _language, _signal, conversationId) => ({
+        message_id: 'message-1',
+        conversation_id: conversationId!,
+        question: 'Explain this.',
+        created_at: '2026-10-23T12:00:00Z',
+        answer: 'It is fine.',
+        uncertainties: [],
+        referenced_finding_ids: [],
+      }),
+    )
     const user = userEvent.setup()
     renderWithProviders(
       <ContextChat

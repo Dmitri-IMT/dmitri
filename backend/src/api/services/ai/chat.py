@@ -4,12 +4,18 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
-from uuid import UUID
+from uuid import UUID, uuid4
 
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from api.models.persistence import AIChatMessageRecord, ScanRecord
-from api.schemas.ai import AIChatHistoryEntry, AIChatResponse
+from api.schemas.ai import (
+    AIChatHistoryEntry,
+    AIChatResponse,
+    AIConversationsResponse,
+    AIConversationSummary,
+)
 from api.schemas.read import (
     FindingEvidenceSummary,
     FindingRead,
@@ -39,7 +45,7 @@ from api.services.scan_evidence import (
     summarize_finding_evidence,
 )
 
-MAX_CHAT_HISTORY = 10
+CHAT_PAGE_SIZE = 50
 MAX_CHAT_FINDINGS = 5
 MAX_HOST_CHAT_FINDINGS = 10
 MAX_MACHINE_SUMMARY_ROWS = 20
@@ -428,9 +434,11 @@ def save_chat_message(
     response: AIChatResponse,
     scope_type: str = "scan",
     scope_id: UUID | None = None,
+    conversation_id: UUID | None = None,
     commit: bool = True,
 ) -> AIChatHistoryEntry:
     record = AIChatMessageRecord(
+        conversation_id=conversation_id or uuid4(),
         scan_id=scan_id,
         user_id=user_id,
         scope_type=scope_type,
@@ -445,17 +453,6 @@ def save_chat_message(
     session.add(record)
     session.flush()
     session.refresh(record)
-    older_records = session.exec(
-        select(AIChatMessageRecord)
-        .where(
-            AIChatMessageRecord.scope_type == scope_type,
-            AIChatMessageRecord.scope_id == (scope_id or scan_id),
-        )
-        .order_by(AIChatMessageRecord.created_at.desc())
-        .offset(MAX_CHAT_HISTORY)
-    ).all()
-    for older_record in older_records:
-        session.delete(older_record)
     if commit:
         session.commit()
     return _history_entry(record)
@@ -468,9 +465,11 @@ def list_chat_messages(
     org_id: UUID,
     scope_type: str = "scan",
     scope_id: UUID | None = None,
-    limit: int = MAX_CHAT_HISTORY,
+    user_id: UUID | None = None,
+    conversation_id: UUID | None = None,
+    limit: int = CHAT_PAGE_SIZE,
+    page: int = 1,
 ) -> list[AIChatHistoryEntry]:
-    limit = min(limit, MAX_CHAT_HISTORY)
     filters = [
         ScanRecord.org_id == org_id,
         AIChatMessageRecord.scope_type == scope_type,
@@ -478,11 +477,18 @@ def list_chat_messages(
     ]
     if scan_id is not None and scope_type != "host":
         filters.append(AIChatMessageRecord.scan_id == scan_id)
+    if user_id is not None:
+        filters.append(AIChatMessageRecord.user_id == user_id)
+    if conversation_id is not None:
+        filters.append(AIChatMessageRecord.conversation_id == conversation_id)
     statement = (
         select(AIChatMessageRecord)
         .join(ScanRecord, ScanRecord.scan_id == AIChatMessageRecord.scan_id)
         .where(*filters)
-        .order_by(AIChatMessageRecord.created_at.desc())
+        .order_by(
+            AIChatMessageRecord.created_at.desc(), AIChatMessageRecord.message_id.desc()
+        )
+        .offset((page - 1) * CHAT_PAGE_SIZE)
         .limit(limit)
     )
     records = list(session.exec(statement).all())
@@ -490,9 +496,43 @@ def list_chat_messages(
     return [_history_entry(record) for record in records]
 
 
+def list_conversations(
+    session: Session, *, user_id: UUID, org_id: UUID,
+    scope: str, context_id: UUID, page: int,
+) -> AIConversationsResponse:
+    messages = AIChatMessageRecord
+    ordered = select(
+        messages.conversation_id, messages.question,
+        func.max(messages.created_at).over(
+            partition_by=messages.conversation_id
+        ).label("updated_at"),
+        func.row_number().over(
+            partition_by=messages.conversation_id,
+            order_by=(messages.created_at, messages.message_id),
+        ).label("position"),
+    ).join(ScanRecord, ScanRecord.scan_id == messages.scan_id).where(
+        ScanRecord.org_id == org_id, messages.user_id == user_id,
+        messages.scope_type == scope, messages.scope_id == context_id,
+    ).subquery()
+    rows = session.execute(
+        select(ordered.c.conversation_id, ordered.c.question, ordered.c.updated_at)
+        .where(ordered.c.position == 1)
+        .order_by(ordered.c.updated_at.desc(), ordered.c.conversation_id.desc())
+        .offset((page - 1) * CHAT_PAGE_SIZE).limit(CHAT_PAGE_SIZE + 1)
+    ).all()
+    return AIConversationsResponse(
+        data=[AIConversationSummary(
+            conversation_id=row.conversation_id, title=row.question,
+            updated_at=row.updated_at,
+        ) for row in rows[:CHAT_PAGE_SIZE]],
+        has_more=len(rows) > CHAT_PAGE_SIZE,
+    )
+
+
 def _history_entry(record: AIChatMessageRecord) -> AIChatHistoryEntry:
     return AIChatHistoryEntry(
         message_id=record.message_id,
+        conversation_id=record.conversation_id,
         question=record.question,
         answer=record.answer,
         uncertainties=record.uncertainties_json,

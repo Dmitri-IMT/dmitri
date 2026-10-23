@@ -24,6 +24,7 @@ class AIContextChatRequest(AIChatRequest):
 
     scope: Literal["scan", "host", "finding"]
     context_id: UUID
+    conversation_id: UUID | None = None
 
 
 class AIChatResponse(BaseModel):
@@ -36,6 +37,7 @@ class AIChatResponse(BaseModel):
 
 class AIChatHistoryEntry(AIChatResponse):
     message_id: UUID
+    conversation_id: UUID
     question: AIShortText
     created_at: datetime
 
@@ -44,6 +46,18 @@ class AIChatHistoryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     data: list[AIChatHistoryEntry]
+    has_more: bool = False
+
+
+class AIConversationSummary(BaseModel):
+    conversation_id: UUID
+    title: str
+    updated_at: datetime
+
+
+class AIConversationsResponse(BaseModel):
+    data: list[AIConversationSummary]
+    has_more: bool
 
 
 class AIUsageEntry(BaseModel):

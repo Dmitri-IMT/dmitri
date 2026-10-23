@@ -234,6 +234,10 @@ As interfaces seguem REST + JSON. O contrato publicado e autoritativo é `contra
   - `GET /api/v1/hosts` → Inventário de máquinas descobertas na rede
   - `GET /api/v1/hosts/{host_id}` → Detalhes de uma máquina
   - `GET /api/v1/findings` → Vulnerabilidades encontradas (filtráveis por severidade, scan ou host)
+  - `POST /api/v1/ai/chat` → Responder e salvar uma mensagem no contexto selecionado; retorna os IDs da mensagem e da conversa
+  - `GET /api/v1/ai/chat/conversations` → Conversas salvas do usuário no contexto selecionado, com título, data e paginação
+  - `GET /api/v1/ai/chat/history` → Mensagens salvas do usuário, filtradas por conversa e paginadas
+  - `POST /api/v1/ai/explain` → Explicação de scan ou máquina, persistida por contexto, idioma e versão do prompt; requisições simultâneas compartilham a geração
   - `DELETE /api/v1/scans/{scan_id}`, `DELETE /api/v1/scans` → Excluir um scan finalizado ou todos os scans finalizados (admin; `409 scan_running` se o scan não terminou; ver ADR-022)
   - `DELETE /api/v1/hosts/{host_id}`, `DELETE /api/v1/hosts` → Excluir uma máquina ou todas as máquinas (admin; os scans permanecem; ver ADR-022)
   - `POST /api/v1/auth/login` → Login (email/senha)

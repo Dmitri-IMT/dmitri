@@ -187,3 +187,83 @@ def test_deleting_context_removes_its_explanation(
     response = client.delete(f"/api/v1/{resource}/{context_id}", headers=headers)
     assert response.status_code in (200, 204), response.text
     assert administrative_session.exec(select(AIExplanationRecord)).all() == []
+
+
+@pytest.mark.parametrize('scope', ['scan', 'host'])
+@pytest.mark.parametrize('language', ['en', 'pt-BR', 'ru'])
+def test_saved_explanation_reopens_without_generation_even_when_ai_is_unavailable(
+    client, administrative_session, actor_headers, provider, scope, language,
+    monkeypatch,
+):
+    seeded = seed_read_graph(administrative_session)
+    first = ask(client, seeded, actor_headers, scope=scope, language=language)
+    assert first.status_code == 200, first.text
+    app.dependency_overrides[get_settings] = lambda: get_settings().model_copy(
+        update={'ai_enabled': False}
+    )
+    monkeypatch.setattr('api.routers.ai.explanation_context', lambda *args: pytest.fail(
+        'A saved explanation must not rebuild its model context'
+    ))
+    second = ask(client, seeded, actor_headers, scope=scope, language=language)
+    assert second.status_code == 200, second.text
+    assert second.json() == first.json()
+    assert len(provider.calls) == 1
+
+
+@pytest.mark.parametrize('scope', ['scan', 'host'])
+def test_concurrent_portuguese_requests_share_one_saved_explanation(
+    client, administrative_session, actor_headers, provider, monkeypatch, scope,
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from api.db.session import get_session
+    from api.routers import ai
+    from sqlmodel import Session
+
+    seeded = seed_read_graph(administrative_session)
+    headers = actor_headers(seeded['org'].id, 'viewer')
+    context_id = seeded['scan'].scan_id if scope == 'scan' else seeded['host'].id
+    entered, authorized, release = Event(), Event(), Event()
+    resolve = ai._resolve_scan_id
+    original = provider.explain_context
+    resolutions = []
+
+    def independent_session():
+        with Session(administrative_session.get_bind()) as session:
+            yield session
+
+    monkeypatch.setitem(app.dependency_overrides, get_session, independent_session)
+
+    def resolved(*args):
+        result = resolve(*args)
+        resolutions.append(result)
+        if len(resolutions) == 2:
+            authorized.set()
+        return result
+
+    def explain(context, *, scope, language):
+        entered.set()
+        assert release.wait(5)
+        return original(context, scope=scope, language=language)
+
+    monkeypatch.setattr(ai, '_resolve_scan_id', resolved)
+    monkeypatch.setattr(provider, 'explain_context', explain)
+
+    def request():
+        return client.post('/api/v1/ai/explain', json={
+            'scope': scope, 'context_id': str(context_id), 'language': 'pt-BR',
+        }, headers=headers)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(request)
+        assert entered.wait(5)
+        second = pool.submit(request)
+        try:
+            assert authorized.wait(5)
+        finally:
+            release.set()
+        first_result, second_result = first.result(), second.result()
+    assert first_result.status_code == second_result.status_code == 200
+    assert first_result.json() == second_result.json()
+    assert len(provider.calls) == 1

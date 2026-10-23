@@ -535,6 +535,7 @@ class AIChatMessageRecord(SQLModel, table=True):
     __tablename__ = "ai_chat_messages"
 
     message_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    conversation_id: UUID = Field(default_factory=uuid4, index=True)
     scan_id: UUID = Field(index=True, foreign_key="scans.scan_id")
     user_id: UUID = Field(index=True, foreign_key="users.id")
     scope_type: str = Field(default="scan", index=True)

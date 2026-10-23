@@ -26,6 +26,12 @@ export const queryKeys = {
       ['scans', 'analysis', scanId, language] as const,
   },
   ai: {
+    conversations: (scope: string, contextId: string) =>
+      ['ai', 'conversations', scope, contextId] as const,
+    chat: (scope: string, contextId: string, conversationId: string | null) =>
+      ['ai', 'chat', scope, contextId, conversationId] as const,
+    asking: (scope: string, contextId: string) =>
+      ['ai', 'asking', scope, contextId] as const,
     explanation: (
       scope: string,
       contextId: string,

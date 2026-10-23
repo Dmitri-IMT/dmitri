@@ -5,6 +5,11 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-10-23
 
+* **Update**: Focused chat modal uses the shipped design tokens, with clock history and pencil
+  new-chat actions. Private paginated conversations persist across closing and reopening;
+  migration `20261024_48` preserves surviving legacy transcripts and removes ten-message pruning.
+* **Update**: Explanation generation survives panel closing and language changes; cached reads
+  skip model-context construction, and PostgreSQL serializes concurrent generations per language.
 * **Update**: R6 scan and machine composition: story, to-do, meaning, shared risk-sorted
   problems and counted IT disclosures. Replaced both finding panels and inline finding chats.
 * **Creation**: Result-component map covering term/risk hints, vulnerability states and

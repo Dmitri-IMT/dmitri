@@ -12,11 +12,16 @@ from api.core.config import Settings, get_settings
 from api.db.session import get_session
 from api.dependencies.auth import CallerIdentity, require_user
 from api.errors import ApiError
-from api.models.persistence import AIExplanationRecord, AIUsageRecord
+from api.models.persistence import (
+    AIChatMessageRecord,
+    AIExplanationRecord,
+    AIUsageRecord,
+)
 from api.schemas.ai import (
+    AIChatHistoryEntry,
     AIChatHistoryResponse,
-    AIChatResponse,
     AIContextChatRequest,
+    AIConversationsResponse,
     AIExplainRequest,
     AIExplanationResponse,
     AIUsageEntry,
@@ -26,6 +31,7 @@ from api.schemas.ai import (
     ScanExplanationResponse,
 )
 from api.services.ai.chat import (
+    CHAT_PAGE_SIZE,
     AIChatContextBundle,
     answer_interactive_question,
     build_finding_chat_bundle,
@@ -33,6 +39,7 @@ from api.services.ai.chat import (
     build_scan_chat_bundle,
     context_findings,
     list_chat_messages,
+    list_conversations,
     save_chat_message,
     scrub_secrets,
 )
@@ -128,26 +135,53 @@ def get_ai_usage(
 def list_context_chat(
     scope: str = Query(..., pattern="^(scan|host|finding)$"),
     context_id: UUID = Query(...),
+    conversation_id: UUID | None = Query(None),
+    page: int = Query(1, ge=1),
     session: Session = Depends(get_session),
     caller: CallerIdentity = Depends(require_user),
 ) -> AIChatHistoryResponse:
     scan_id = _resolve_scan_id(session, scope, context_id, caller.org_id)
     if scan_id is None:
         raise HTTPException(status_code=404, detail="Context not found")
+    messages = list_chat_messages(
+        session,
+        scan_id=scan_id,
+        org_id=caller.org_id,
+        scope_type=scope,
+        scope_id=context_id,
+        user_id=caller.sub,
+        conversation_id=conversation_id,
+        page=page,
+        limit=CHAT_PAGE_SIZE + 1,
+    )
     return AIChatHistoryResponse(
-        data=list_chat_messages(
-            session,
-            scan_id=scan_id,
-            org_id=caller.org_id,
-            scope_type=scope,
-            scope_id=context_id,
-        )
+        data=messages[-CHAT_PAGE_SIZE:], has_more=len(messages) > CHAT_PAGE_SIZE,
+    )
+
+
+@router.get(
+    "/api/v1/ai/chat/conversations",
+    response_model=AIConversationsResponse,
+    operation_id="listAIConversations",
+)
+def list_context_conversations(
+    scope: str = Query(..., pattern="^(scan|host|finding)$"),
+    context_id: UUID = Query(...),
+    page: int = Query(1, ge=1),
+    session: Session = Depends(get_session),
+    caller: CallerIdentity = Depends(require_user),
+) -> AIConversationsResponse:
+    if _resolve_scan_id(session, scope, context_id, caller.org_id) is None:
+        raise HTTPException(status_code=404, detail="Context not found")
+    return list_conversations(
+        session, user_id=caller.sub, org_id=caller.org_id,
+        scope=scope, context_id=context_id, page=page,
     )
 
 
 @router.post(
     "/api/v1/ai/chat",
-    response_model=AIChatResponse,
+    response_model=AIChatHistoryEntry,
     operation_id="askContextAI",
 )
 def ask_context_chat(
@@ -155,7 +189,16 @@ def ask_context_chat(
     session: Session = Depends(get_session),
     caller: CallerIdentity = Depends(require_user),
     settings: Settings = Depends(get_settings),
-) -> AIChatResponse:
+) -> AIChatHistoryEntry:
+    if payload.conversation_id is not None:
+        existing = session.exec(select(AIChatMessageRecord).where(
+            AIChatMessageRecord.conversation_id == payload.conversation_id
+        )).first()
+        if existing is not None and (
+            existing.user_id != caller.sub or existing.scope_type != payload.scope
+            or existing.scope_id != payload.context_id
+        ):
+            raise HTTPException(status_code=404, detail="Conversation not found")
     if not ai_is_available(settings):
         raise ApiError(503, "The AI assistant is unavailable.", code="ai_unavailable")
     now = datetime.now(timezone.utc)
@@ -206,7 +249,7 @@ def ask_context_chat(
             user_id=caller.sub,
             commit=False,
         )
-        save_chat_message(
+        saved = save_chat_message(
             session,
             scan_id=scan_id,
             user_id=caller.sub,
@@ -214,10 +257,11 @@ def ask_context_chat(
             response=response,
             scope_type=payload.scope,
             scope_id=payload.context_id,
+            conversation_id=payload.conversation_id,
             commit=False,
         )
         session.commit()
-        return response
+        return saved
     except AIProviderError as exc:
         # The tokens were spent even though the answer failed, so the usage rows
         # are committed on their own. There is no transcript to pair them with.
@@ -265,12 +309,20 @@ def explain_context(
     caller: CallerIdentity = Depends(require_user),
     settings: Settings = Depends(get_settings),
 ) -> AIExplanationResponse:
-    resolved = explanation_context(
-        session, payload.scope, payload.context_id, caller.org_id, payload.language
+    scan_id = _resolve_scan_id(
+        session, payload.scope, payload.context_id, caller.org_id
     )
-    if resolved is None:
+    if scan_id is None:
         raise HTTPException(status_code=404, detail="Context not found")
-    bundle, scan_id, leads = resolved
+    # Serialize the first generation across API processes and browser reconnects.
+    # The transaction releases this lock after saving, or on request teardown.
+    lock_key = (
+        f"explain:{payload.scope}:{payload.context_id}:"
+        f"{payload.language}:{AI_PROMPT_VERSION}"
+    )
+    session.execute(select(func.pg_advisory_xact_lock(
+        func.hashtextextended(lock_key, 0)
+    )))
     cached = session.exec(
         select(AIExplanationRecord).where(
             AIExplanationRecord.scope == payload.scope,
@@ -289,6 +341,12 @@ def explain_context(
             language=payload.language, created_at=cached.created_at,
             explanation=cached.explanation_json,
         )
+    resolved = explanation_context(
+        session, payload.scope, payload.context_id, caller.org_id, payload.language
+    )
+    if resolved is None:
+        raise HTTPException(status_code=404, detail="Context not found")
+    bundle, scan_id, leads = resolved
     if not ai_is_available(settings):
         raise ApiError(503, "The AI assistant is unavailable.", code="ai_unavailable")
     now = datetime.now(timezone.utc)

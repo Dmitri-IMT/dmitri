@@ -739,4 +739,10 @@ export const handlers = [
       activity: { ...snapshot.activity, page: activityPage },
     })
   }),
+  http.get(`${baseURL}/ai/chat/history`, () =>
+    HttpResponse.json({ data: [], has_more: false }),
+  ),
+  http.get(`${baseURL}/ai/chat/conversations`, () =>
+    HttpResponse.json({ data: [], has_more: false }),
+  ),
 ]

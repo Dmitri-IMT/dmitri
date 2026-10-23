@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Dialog } from 'radix-ui'
 import { explainAIContext } from '@/api/ai'
 import { queryKeys } from '@/api/queryKeys'
+import { useSession } from '@/auth/useSession'
 import SidePanel from '@/components/SidePanel'
 import WaitingState from '@/components/WaitingState'
 import { Button } from '@/components/ui/button'
@@ -27,7 +28,12 @@ export default function ExplainPanel({
   const [open, setOpen] = useState(false)
   const [cancelled, setCancelled] = useState(false)
   const [startedAt, setStartedAt] = useState(0)
-  const key = queryKeys.ai.explanation(scope, contextId, language, scanId)
+  const requests = useRef(new Map<string, AbortController>())
+  const actor = useSession().user?.user_id ?? 'anonymous'
+  const key = [
+    ...queryKeys.ai.explanation(scope, contextId, language, scanId),
+    actor,
+  ]
   const analysis = useScanAnalysis(scanId, open)
   const task =
     analysis.data?.status === 'completed'
@@ -35,10 +41,23 @@ export default function ExplainPanel({
       : undefined
   const query = useQuery({
     queryKey: key,
-    queryFn: ({ signal }) =>
-      explainAIContext({ scope, context_id: contextId, language }, signal),
+    queryFn: async () => {
+      // Continue saving the answer when the panel closes or the language changes.
+      // Only the explicit Cancel action aborts a generation.
+      const controller = new AbortController()
+      requests.current.set(language, controller)
+      try {
+        return await explainAIContext(
+          { scope, context_id: contextId, language },
+          controller.signal,
+        )
+      } finally {
+        requests.current.delete(language)
+      }
+    },
     enabled: open && !cancelled,
     staleTime: Infinity,
+    gcTime: Infinity,
     retry: false,
   })
   useEffect(() => {
@@ -65,7 +84,7 @@ export default function ExplainPanel({
         if (value) {
           setCancelled(false)
           setStartedAt(Date.now())
-        } else void queryClient.cancelQueries({ queryKey: key })
+        }
       }}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto p-6">
@@ -80,6 +99,7 @@ export default function ExplainPanel({
             cancelLabel={t('ai.waiting.cancel')}
             onCancel={() => {
               setCancelled(true)
+              requests.current.get(language)?.abort()
               void queryClient.cancelQueries({ queryKey: key })
             }}
             testId="explain-waiting"

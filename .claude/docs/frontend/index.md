@@ -42,7 +42,7 @@ table. App source lives at `frontend/src/`; the local lint plugin lives at `fron
 * [agent-update-hook](./agent-update-hook.md) — Device update queries, active-operation polling, request idempotency, cache reconciliation and deduplicated read-error notifications.
 * [scan-partial-warning](./scan-partial-warning.md) — ScanPartialWarning shows a plain attention line beside scan duration when a scan is partial.
 * [scan-ai](./scan-ai.md) — Fix-task list with language-specific caching, progress, checked sources and scanner fallback.
-* [context-ai](./context-ai.md) — Structured explanation side panels and top-bar contextual chat.
+* [context-ai](./context-ai.md) — Structured explanation side panels and a Focused modal with dated saved chats and a new-chat pencil.
 * [home-ai-overview](./home-ai-overview.md) — Home teaser for the latest successful scan's analysis status.
 * [ai-usage](./ai-usage.md) — Settings panel for org-wide provider usage totals and recent operations.
 * [tables](./tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.

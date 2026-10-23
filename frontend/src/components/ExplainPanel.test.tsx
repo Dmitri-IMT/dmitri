@@ -124,5 +124,94 @@ it('renders the machine schema instead of free chat and hands off to the assista
   await waitFor(() =>
     expect(screen.getByRole('dialog')).toHaveTextContent('Ask Dmitri'),
   )
-  expect(screen.getByRole('dialog')).toHaveTextContent('can search the web')
+  expect(
+    within(screen.getByRole('dialog')).getByRole('button', {
+      name: 'Saved chats',
+    }),
+  ).toBeVisible()
 })
+
+it.each(['scan', 'host'] as const)(
+  'keeps the Portuguese %s explanation running after close and reuses it after switching languages',
+  async (scope) => {
+    const user = userEvent.setup()
+    const { LanguageProvider, useLanguage } =
+      await import('@/i18n/LanguageProvider')
+    function SwitchLanguage() {
+      const { setLanguage } = useLanguage()
+      return (
+        <>
+          <button onClick={() => setLanguage('pt-BR')}>Português</button>
+          <button onClick={() => setLanguage('en')}>English</button>
+        </>
+      )
+    }
+    let finish!: () => void
+    const completed = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    const calls: string[] = []
+    server.use(
+      http.post(`${api}/ai/explain`, async ({ request }) => {
+        const payload = (await request.json()) as { language: string }
+        calls.push(payload.language)
+        if (payload.language === 'pt-BR') await completed
+        const text =
+          payload.language === 'pt-BR'
+            ? 'A explicação salva em português.'
+            : 'The saved English explanation.'
+        return HttpResponse.json(
+          scope === 'scan'
+            ? {
+                ...scanExplanation,
+                language: payload.language,
+                explanation: { ...scanExplanation.explanation, in_short: text },
+              }
+            : {
+                scope,
+                context_id: id,
+                language: payload.language,
+                created_at: scanExplanation.created_at,
+                explanation: {
+                  what_it_is: text,
+                  problems: 'Its software needs an update.',
+                },
+              },
+        )
+      }),
+    )
+    renderWithProviders(
+      <LanguageProvider>
+        <SwitchLanguage />
+        <ExplainPanel scope={scope} contextId={id} scanId={id} />
+      </LanguageProvider>,
+    )
+    await user.click(screen.getByRole('button', { name: 'Português' }))
+    const trigger = screen.getByTestId(
+      scope === 'scan' ? 'scan-explain-open' : 'machine-explain-open',
+    )
+    await user.click(trigger)
+    expect(await screen.findByTestId('explain-waiting')).toBeVisible()
+    await user.keyboard('{Escape}')
+    await user.click(trigger)
+    expect(calls).toEqual(['pt-BR'])
+    finish()
+    expect(
+      await screen.findByText('A explicação salva em português.'),
+    ).toBeVisible()
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'English' }))
+    await user.click(trigger)
+    expect(
+      await screen.findByText('The saved English explanation.'),
+    ).toBeVisible()
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Português' }))
+    await user.click(trigger)
+    expect(
+      await screen.findByText('A explicação salva em português.'),
+    ).toBeVisible()
+    expect(calls).toEqual(['pt-BR', 'en'])
+    localStorage.removeItem('dmitri-language')
+  },
+)

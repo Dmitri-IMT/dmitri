@@ -49,6 +49,7 @@ EXPECTED_ROUTE_SURFACE = {
     ("/api/v1/ai/chat", "POST"),
     ("/api/v1/ai/explain", "POST"),
     ("/api/v1/ai/chat/history", "GET"),
+    ("/api/v1/ai/chat/conversations", "GET"),
     ("/api/v1/ai/usage", "GET"),
     ("/api/v1/findings", "GET"),
     ("/api/v1/findings/{finding_id}", "GET"),
