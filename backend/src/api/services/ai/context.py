@@ -12,10 +12,13 @@ from sqlmodel import Session, func, select
 from api.core.scan_read import scan_duration_seconds, scan_terminated_by
 from api.core.severity import Severity
 from api.models.persistence import (
+    CPERecord,
     EpssRecord,
+    FindingRecord,
     KevRecord,
     ScanHostRecord,
     ScanRecord,
+    ServiceRecord,
 )
 from api.schemas.ai import (
     AIFindingExplanation,
@@ -105,6 +108,9 @@ class AIFindingContext(BaseModel):
     epss_percentile: Annotated[float | None, Field(ge=0, le=1)]
     is_kev: bool
     known_ransomware: bool
+    service: str | None = None
+    product: str | None = None
+    version: str | None = None
     version_affected: Literal["yes", "no", "unknown"] | None = None
     fix_options: list[AIFixOptionContext] = Field(default_factory=list)
 
@@ -311,6 +317,7 @@ def build_scan_ai_context(
         epss_by_cve=epss_by_cve,
         kev_by_cve=kev_by_cve,
     )
+    describe_observed_products(session, bundle.contexts, bundle.finding_ids_by_ref)
     coverage = parse_coverage(scan.coverage_json)
 
     context = ScanAIContext(
@@ -337,6 +344,64 @@ def build_scan_ai_context(
     context._finding_ids_by_ref = bundle.finding_ids_by_ref
     context._display_values_by_ref = bundle.display_values_by_ref
     return context
+
+
+def describe_observed_products(
+    session: Session,
+    findings: Sequence[AIFindingContext],
+    finding_ids_by_ref: dict[str, UUID],
+) -> None:
+    finding_ids = [finding_ids_by_ref[finding.finding_ref] for finding in findings]
+    if not finding_ids:
+        return
+    services = dict(
+        session.exec(
+            select(FindingRecord.finding_id, ServiceRecord.name)
+            .join(ServiceRecord, ServiceRecord.port_id == FindingRecord.port_id)
+            .where(FindingRecord.finding_id.in_(finding_ids))
+        ).all()
+    )
+    cpes: dict[UUID, list[tuple[str, str | None]]] = {}
+    for finding_id, cpe in session.exec(
+        select(FindingRecord.finding_id, CPERecord.cpe)
+        .join(CPERecord, CPERecord.port_id == FindingRecord.port_id)
+        .where(FindingRecord.finding_id.in_(finding_ids))
+    ).all():
+        product = _cpe_product(cpe)
+        if product is not None:
+            cpes.setdefault(finding_id, []).append(product)
+    for finding in findings:
+        finding_id = finding_ids_by_ref[finding.finding_ref]
+        finding.service = _normalize_product_text(services.get(finding_id))
+        candidates = sorted(
+            cpes.get(finding_id, []),
+            key=lambda product: (product[1] is None, product),
+        )
+        if candidates:
+            finding.product, finding.version = candidates[0]
+
+
+def _cpe_product(cpe: str) -> tuple[str, str | None] | None:
+    if cpe.startswith("cpe:2.3:"):
+        parts = cpe.split(":")[2:]
+    elif cpe.startswith("cpe:/"):
+        parts = cpe[5:].split(":")
+    else:
+        return None
+    if len(parts) < 3 or parts[0] != "a" or not parts[1] or not parts[2]:
+        return None
+    version = parts[3] if len(parts) > 3 and parts[3] not in {"", "*", "-"} else None
+    product = _normalize_product_text(f"{parts[1]} {parts[2]}".replace("_", " "))
+    if product is None:
+        return None
+    return product, _normalize_product_text(version)
+
+
+def _normalize_product_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = " ".join(value.lower().split())[:160]
+    return text or None
 
 
 def materialize_scan_ai_analysis(

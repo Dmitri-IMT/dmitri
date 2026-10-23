@@ -5,6 +5,7 @@ import {
   type AIContextScope,
 } from '@/api/ai'
 import type { AIChatHistoryResponse } from '@/api/ai'
+import ChatAnswer from '@/components/ChatAnswer'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
@@ -174,7 +175,7 @@ export default function ContextChat({
             )}
             <div>
               <p className="text-body-sm font-medium">{t('ai.answer')}</p>
-              <p className="text-body-md">{message.answer}</p>
+              <ChatAnswer text={message.answer} />
             </div>
             {message.uncertainties.length > 0 && (
               <div className="text-body-sm text-muted-foreground">

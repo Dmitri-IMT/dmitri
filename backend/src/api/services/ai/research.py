@@ -3,25 +3,19 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-from uuid import UUID
 
 from sqlmodel import Session, select
 
 from api.core.config import Settings
-from api.models.persistence import (
-    AIFixRecord,
-    CPERecord,
-    FindingRecord,
-    KevRecord,
-    NvdCacheRecord,
-    ServiceRecord,
-)
+from api.models.persistence import AIFixRecord, KevRecord, NvdCacheRecord
 from api.schemas.ai import ProviderCVEFixResearch
 from api.services.ai.context import (
+    AIFindingContext,
     AIFixOptionContext,
     FixResearchTarget,
     ScanAIContext,
@@ -31,7 +25,7 @@ from api.services.ai.providers import FixResearchProvider
 
 logger = logging.getLogger(__name__)
 
-FIX_RESEARCH_VERSION = "1"
+FIX_RESEARCH_VERSION = "2"
 MAX_PARALLEL_RESEARCH = 5
 
 _EFFORT_ORDER = ("setting_change", "update", "workaround", "replace", "ask_vendor")
@@ -59,22 +53,9 @@ def attach_fix_records(
     settings: Settings,
     now: datetime,
 ) -> None:
-    items = _research_items(session, context)
-    if not items:
-        return
-    cached = {
-        row.cache_key: row
-        for row in session.exec(
-            select(AIFixRecord).where(AIFixRecord.cache_key.in_(list(items)))
-        ).all()
-    }
-    missing = []
-    for key, item in items.items():
-        row = cached.get(key)
-        if row is not None and _is_current(row, item, now):
-            item.record = row.record_json
-        else:
-            missing.append(item)
+    items = _research_items(session, context.top_findings)
+    cached = _read_current(session, items, now)
+    missing = [item for item in items.values() if item.record is None]
 
     rate_limited: AIProviderError | None = None
     if missing:
@@ -109,8 +90,39 @@ def attach_fix_records(
         session.commit()
     if rate_limited is not None:
         raise rate_limited
+    _apply(items, context.top_findings)
 
-    by_ref = {finding.finding_ref: finding for finding in context.top_findings}
+
+def attach_cached_fix_records(
+    session: Session, findings: Sequence[AIFindingContext], *, now: datetime
+) -> None:
+    items = _research_items(session, findings)
+    _read_current(session, items, now)
+    _apply(items, findings)
+
+
+def _read_current(
+    session: Session, items: dict[str, _ResearchItem], now: datetime
+) -> dict[str, AIFixRecord]:
+    if not items:
+        return {}
+    cached = {
+        row.cache_key: row
+        for row in session.exec(
+            select(AIFixRecord).where(AIFixRecord.cache_key.in_(list(items)))
+        ).all()
+    }
+    for key, item in items.items():
+        row = cached.get(key)
+        if row is not None and _is_current(row, item, now):
+            item.record = row.record_json
+    return cached
+
+
+def _apply(
+    items: dict[str, _ResearchItem], findings: Sequence[AIFindingContext]
+) -> None:
+    by_ref = {finding.finding_ref: finding for finding in findings}
     for item in items.values():
         if item.record is None:
             continue
@@ -196,18 +208,11 @@ def _plain(value: str) -> str:
 
 
 def _research_items(
-    session: Session, context: ScanAIContext
+    session: Session, findings: Sequence[AIFindingContext]
 ) -> dict[str, _ResearchItem]:
-    findings = [
-        finding for finding in context.top_findings if finding.cve_id is not None
-    ]
+    findings = [finding for finding in findings if finding.cve_id is not None]
     if not findings:
         return {}
-    finding_ids = {
-        finding.finding_ref: context._finding_ids_by_ref[finding.finding_ref]
-        for finding in findings
-    }
-    products = _observed_products(session, list(finding_ids.values()))
     cve_ids = {finding.cve_id.upper() for finding in findings}
     kev_by_cve = {
         row.cve_id.upper(): row
@@ -226,20 +231,18 @@ def _research_items(
     items: dict[str, _ResearchItem] = {}
     for finding in findings:
         cve_id = finding.cve_id.upper()
-        service, product, version = products.get(
-            finding_ids[finding.finding_ref], (None, None, None)
-        )
         key = hashlib.sha256(
-            f"{FIX_RESEARCH_VERSION}|{cve_id}|{product or ''}|{version or ''}".encode()
+            f"{FIX_RESEARCH_VERSION}|{cve_id}|{finding.product or ''}|"
+            f"{finding.version or ''}".encode()
         ).hexdigest()
         if key not in items:
             kev = kev_by_cve.get(cve_id)
             items[key] = _ResearchItem(
                 target=FixResearchTarget(
                     cve_id=cve_id,
-                    product=product,
-                    version=version,
-                    service=service,
+                    product=finding.product,
+                    version=finding.version,
+                    service=finding.service,
                     severity=finding.severity,
                     cvss_score=finding.cvss_score,
                     is_kev=finding.is_kev,
@@ -254,67 +257,6 @@ def _research_items(
             )
         items[key].finding_refs.append(finding.finding_ref)
     return items
-
-
-def _observed_products(
-    session: Session, finding_ids: list[UUID]
-) -> dict[UUID, tuple[str | None, str | None, str | None]]:
-    services = {
-        finding_id: (name, version)
-        for finding_id, name, version in session.exec(
-            select(FindingRecord.finding_id, ServiceRecord.name, ServiceRecord.version)
-            .join(ServiceRecord, ServiceRecord.port_id == FindingRecord.port_id)
-            .where(FindingRecord.finding_id.in_(finding_ids))
-        ).all()
-    }
-    cpes: dict[UUID, list[str]] = {}
-    for finding_id, cpe in session.exec(
-        select(FindingRecord.finding_id, CPERecord.cpe)
-        .join(CPERecord, CPERecord.port_id == FindingRecord.port_id)
-        .where(FindingRecord.finding_id.in_(finding_ids))
-    ).all():
-        cpes.setdefault(finding_id, []).append(cpe)
-
-    products = {}
-    for finding_id in finding_ids:
-        name, banner = services.get(finding_id, (None, None))
-        parsed = sorted(
-            (
-                product
-                for product in (_cpe_product(cpe) for cpe in cpes.get(finding_id, []))
-                if product is not None
-            ),
-            key=lambda product: (product[1] is None, product),
-        )
-        if parsed:
-            product, version = parsed[0]
-        else:
-            product, version = _normalize(name), _normalize(banner)
-        products[finding_id] = (_normalize(name), product, version)
-    return products
-
-
-def _cpe_product(cpe: str) -> tuple[str, str | None] | None:
-    if cpe.startswith("cpe:2.3:"):
-        parts = cpe.split(":")[2:]
-    elif cpe.startswith("cpe:/"):
-        parts = cpe[5:].split(":")
-    else:
-        return None
-    if len(parts) < 3 or parts[0] != "a" or not parts[1] or not parts[2]:
-        return None
-    version = parts[3] if len(parts) > 3 and parts[3] not in {"", "*", "-"} else None
-    product = _normalize(f"{parts[1]} {parts[2]}".replace("_", " "))
-    if product is None:
-        return None
-    return product, _normalize(version)
-
-
-def _normalize(value: str | None) -> str | None:
-    if value is None:
-        return None
-    text = " ".join(value.lower().split())[:160]
-    return text or None
 
 
 def _kev_fingerprint(kev: KevRecord | None) -> str:

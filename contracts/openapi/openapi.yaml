@@ -7268,7 +7268,7 @@ components:
         answer:
           type: string
           minLength: 3
-          maxLength: 4000
+          maxLength: 8000
         uncertainties:
           type: array
           maxItems: 10

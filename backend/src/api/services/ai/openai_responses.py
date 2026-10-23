@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import re
 import time
@@ -14,7 +15,6 @@ from pydantic import BaseModel, ValidationError
 
 from api.core.config import Settings
 from api.schemas.ai import (
-    ProviderAIChatResponse,
     ProviderCVEFixResearch,
     ProviderScanAIAnalysis,
     ProviderScanAIChildAnalysis,
@@ -22,10 +22,11 @@ from api.schemas.ai import (
 from api.services.ai.context import AIChatContext, FixResearchTarget, ScanAIContext
 
 _ProviderResponseT = TypeVar("_ProviderResponseT", bound=BaseModel)
+logger = logging.getLogger(__name__)
 
 OPENAI_PROVIDER_ID = "openai"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-AI_PROMPT_VERSION = "9"
+AI_PROMPT_VERSION = "10"
 
 _INSTRUCTIONS_DIR = Path(__file__).parent / "instructions"
 
@@ -97,6 +98,25 @@ class ProviderUsageEvent:
     reasoning_tokens: int | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class UrlCitation:
+    start: int
+    end: int
+    url: str
+
+
+@dataclass(frozen=True, slots=True)
+class ChatTextPart:
+    text: str
+    citations: tuple[UrlCitation, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderChatAnswer:
+    parts: tuple[ChatTextPart, ...]
+    sources: frozenset[str]
+
+
 class OpenAIResponsesProvider:
     def __init__(
         self,
@@ -107,6 +127,8 @@ class OpenAIResponsesProvider:
         max_output_tokens: int,
         reasoning_effort: str,
         research_max_tool_calls: int = 10,
+        chat_max_tool_calls: int = 10,
+        search_location: dict[str, str] | None = None,
         client: httpx.Client | None = None,
     ) -> None:
         self.api_key = api_key
@@ -115,6 +137,8 @@ class OpenAIResponsesProvider:
         self.max_output_tokens = max_output_tokens
         self.reasoning_effort = reasoning_effort
         self.research_max_tool_calls = research_max_tool_calls
+        self.chat_max_tool_calls = chat_max_tool_calls
+        self.search_location = search_location or {"type": "approximate"}
         self.client = client
         self._usage_events: list[ProviderUsageEvent] = []
 
@@ -236,17 +260,43 @@ class OpenAIResponsesProvider:
 
     def answer_question(
         self, context: AIChatContext, question: str, *, language: str = "en"
-    ) -> ProviderAIChatResponse:
-        return self._complete(
-            USER_CHAT_PROMPT.format(
-                question=question, context_json=context.model_dump_json()
-            ),
-            ProviderAIChatResponse,
+    ) -> ProviderChatAnswer:
+        envelope = self._send(
+            {
+                "model": self.model,
+                "instructions": _instructions("chat", language),
+                "input": USER_CHAT_PROMPT.format(
+                    question=question, context_json=context.model_dump_json()
+                ),
+                "store": False,
+                "reasoning": {"effort": self.reasoning_effort},
+                "max_output_tokens": self.max_output_tokens,
+                "tools": [
+                    {
+                        "type": "web_search",
+                        "search_context_size": "medium",
+                        "user_location": self.search_location,
+                    }
+                ],
+                "max_tool_calls": self.chat_max_tool_calls,
+                "include": ["web_search_call.action.sources"],
+            },
             operation="chat",
-            task="chat",
-            language=language,
-            schema_name="scan_ai_chat",
         )
+        parts = tuple(
+            ChatTextPart(
+                text=part["text"],
+                citations=tuple(_url_citations(part.get("annotations"))),
+            )
+            for part in _output_parts(envelope)
+        )
+        sources = _consulted_sources(envelope)
+        logger.info(
+            "AI chat web search queries=%s sources=%s",
+            _search_queries(envelope),
+            sorted(sources),
+        )
+        return ProviderChatAnswer(parts=parts, sources=frozenset(sources))
 
     def research_fix(
         self, target: FixResearchTarget
@@ -316,6 +366,20 @@ class OpenAIResponsesProvider:
             },
             **(tools or {}),
         }
+        envelope = self._send(payload, operation=operation)
+        try:
+            decoded = json.loads(_output_text(envelope))
+            return response_schema.model_validate(decoded), _consulted_sources(
+                envelope
+            )
+        except (json.JSONDecodeError, ValidationError) as exc:
+            raise AIProviderError(
+                "invalid_provider_response", retryable=False
+            ) from exc
+
+    def _send(
+        self, payload: dict[str, object], *, operation: str
+    ) -> dict[str, object]:
         try:
             response = self._post(payload, operation=operation)
         except httpx.TimeoutException as exc:
@@ -332,15 +396,9 @@ class OpenAIResponsesProvider:
             raise AIProviderError(
                 "invalid_provider_response", retryable=False
             ) from exc
-        try:
-            decoded = json.loads(_output_text(envelope))
-            return response_schema.model_validate(decoded), _consulted_sources(
-                envelope
-            )
-        except (json.JSONDecodeError, ValidationError) as exc:
-            raise AIProviderError(
-                "invalid_provider_response", retryable=False
-            ) from exc
+        if not isinstance(envelope, dict):
+            raise AIProviderError("invalid_provider_response", retryable=False)
+        return envelope
 
     def _post(self, payload: dict[str, object], *, operation: str) -> httpx.Response:
         headers = {
@@ -440,9 +498,7 @@ def _consulted_sources(envelope: dict[str, object]) -> set[str]:
     return urls
 
 
-def _output_text(envelope: object) -> str:
-    if not isinstance(envelope, dict):
-        raise AIProviderError("invalid_provider_response", retryable=False)
+def _output_parts(envelope: dict[str, object]) -> list[dict[str, object]]:
     status = envelope.get("status")
     if status == "incomplete":
         details = envelope.get("incomplete_details")
@@ -452,7 +508,7 @@ def _output_text(envelope: object) -> str:
         raise AIProviderError("provider_output_truncated", retryable=False)
     if status != "completed":
         raise AIProviderError("invalid_provider_response", retryable=False)
-    texts: list[str] = []
+    parts: list[dict[str, object]] = []
     output = envelope.get("output")
     for item in output if isinstance(output, list) else []:
         if not isinstance(item, dict) or item.get("type") != "message":
@@ -466,11 +522,49 @@ def _output_text(envelope: object) -> str:
             if part.get("type") == "output_text" and isinstance(
                 part.get("text"), str
             ):
-                texts.append(part["text"])
-    text = "".join(texts)
-    if not text.strip():
+                parts.append(part)
+    if not "".join(str(part["text"]) for part in parts).strip():
         raise AIProviderError("invalid_provider_response", retryable=False)
-    return text
+    return parts
+
+
+def _output_text(envelope: dict[str, object]) -> str:
+    return "".join(str(part["text"]) for part in _output_parts(envelope))
+
+
+def _url_citations(annotations: object) -> list[UrlCitation]:
+    citations = []
+    for annotation in annotations if isinstance(annotations, list) else []:
+        if not isinstance(annotation, dict):
+            continue
+        start = annotation.get("start_index")
+        end = annotation.get("end_index")
+        url = annotation.get("url")
+        if (
+            annotation.get("type") == "url_citation"
+            and isinstance(start, int)
+            and isinstance(end, int)
+            and isinstance(url, str)
+        ):
+            citations.append(UrlCitation(start=start, end=end, url=url))
+    return citations
+
+
+def _search_queries(envelope: dict[str, object]) -> list[str]:
+    queries: list[str] = []
+    output = envelope.get("output")
+    for item in output if isinstance(output, list) else []:
+        if not isinstance(item, dict) or item.get("type") != "web_search_call":
+            continue
+        action = item.get("action")
+        if not isinstance(action, dict):
+            continue
+        values = action.get("queries")
+        if isinstance(values, list):
+            queries.extend(value for value in values if isinstance(value, str))
+        elif isinstance(action.get("query"), str):
+            queries.append(action["query"])
+    return queries
 
 
 @cache
@@ -644,4 +738,18 @@ def build_ai_provider(settings: Settings) -> OpenAIResponsesProvider | None:
         max_output_tokens=settings.ai_max_output_tokens,
         reasoning_effort=settings.ai_reasoning_effort,
         research_max_tool_calls=settings.ai_research_max_tool_calls,
+        chat_max_tool_calls=settings.ai_chat_max_tool_calls,
+        search_location={
+            "type": "approximate",
+            **(
+                {"country": settings.ai_search_country}
+                if settings.ai_search_country
+                else {}
+            ),
+            **(
+                {"timezone": settings.ai_search_timezone}
+                if settings.ai_search_timezone
+                else {}
+            ),
+        },
     )

@@ -9,11 +9,7 @@ from uuid import UUID
 from sqlmodel import Session, select
 
 from api.models.persistence import AIChatMessageRecord, ScanRecord
-from api.schemas.ai import (
-    AIChatHistoryEntry,
-    AIChatResponse,
-    ProviderAIChatResponse,
-)
+from api.schemas.ai import AIChatHistoryEntry, AIChatResponse
 from api.schemas.read import (
     FindingEvidenceSummary,
     FindingRead,
@@ -24,6 +20,7 @@ from api.schemas.read import (
 )
 from api.services.ai.context import (
     AIChatContext,
+    AIFindingContext,
     ChatAggregate,
     FindingChatContext,
     HostChatContext,
@@ -35,7 +32,8 @@ from api.services.ai.context import (
     reference_names,
     replace_ai_references,
 )
-from api.services.ai.openai_responses import AIProviderError
+from api.services.ai.openai_responses import AIProviderError, ProviderChatAnswer
+from api.services.ai.research import clean_source_url
 from api.services.scan_evidence import (
     incomplete_check_count,
     summarize_finding_evidence,
@@ -45,13 +43,42 @@ MAX_CHAT_HISTORY = 10
 MAX_CHAT_FINDINGS = 5
 MAX_HOST_CHAT_FINDINGS = 10
 MAX_MACHINE_SUMMARY_ROWS = 20
+REMOVED_SECRET = "[removed]"
+
+_NAMED_SECRET = re.compile(
+    r"\b(password|passwd|pwd|senha|пароль|api[_ -]?key|token|secret)"
+    r"(\s*[:=]\s*)\S+",
+    re.IGNORECASE,
+)
+_TOKEN_PATTERNS = (
+    re.compile(r"\bBearer\s+\S+", re.IGNORECASE),
+    re.compile(r"\beyJ[\w-]+\.[\w-]+\.[\w-]+"),
+    re.compile(r"\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+)
+_ADDRESS_PATTERNS = (
+    re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?\b"),
+    re.compile(r"\b(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b", re.IGNORECASE),
+    re.compile(
+        r"(?<![\w:])[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){2,7}(?![\w:])",
+        re.IGNORECASE,
+    ),
+)
+_LONG_TOKEN = re.compile(r"\b[A-Za-z0-9+/_=-]{32,}\b")
+_WRAPPED_LINK = re.compile(r"\(\s*!?\[[^\]]*\]\([^)]*\)\s*\)")
+_MARKDOWN_LINK = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
+_RAW_URL = re.compile(r"(?:https?://|www\.)\S+", re.IGNORECASE)
+_HTML_TAG = re.compile(r"</?[a-z][^>]*>", re.IGNORECASE)
+_HEADING = re.compile(r"^[ \t]{0,3}#{1,6}[ \t]+", re.MULTILINE)
+_EMPTY_PARENS = re.compile(r"\(\s*\)")
 
 
 @runtime_checkable
 class ChatProvider(Protocol):
     def answer_question(
         self, context: AIChatContext, question: str, *, language: str = "en"
-    ) -> ProviderAIChatResponse: ...
+    ) -> ProviderChatAnswer: ...
 
 
 @dataclass(frozen=True)
@@ -156,6 +183,14 @@ def build_host_chat_bundle(
     )
 
 
+def context_findings(context: AIChatContext) -> list[AIFindingContext]:
+    if isinstance(context, ScanChatContext):
+        return context.top_findings
+    if isinstance(context, HostChatContext):
+        return context.findings
+    return [context.finding]
+
+
 def answer_interactive_question(
     provider: ChatProvider,
     bundle: AIChatContextBundle,
@@ -163,16 +198,36 @@ def answer_interactive_question(
     question: str,
     language: str = "en",
 ) -> AIChatResponse:
-    provider_response = provider.answer_question(
-        bundle.provider_context, question, language=language
+    answer = provider.answer_question(
+        bundle.provider_context, scrub_secrets(question), language=language
     )
-    if not isinstance(provider_response, ProviderAIChatResponse):
-        provider_response = ProviderAIChatResponse.model_validate(provider_response)
     return materialize_chat_response(
-        provider_response,
+        answer,
         bundle.finding_ids_by_ref,
         bundle.display_values_by_ref,
     )
+
+
+def scrub_secrets(value: str, *, addresses: bool = True) -> str:
+    text = _NAMED_SECRET.sub(rf"\1\2{REMOVED_SECRET}", value)
+    for pattern in (*_TOKEN_PATTERNS, *(_ADDRESS_PATTERNS if addresses else ())):
+        text = pattern.sub(_address_or_token_removed, text)
+    return _LONG_TOKEN.sub(_mixed_token_removed, text)
+
+
+def _address_or_token_removed(match: re.Match[str]) -> str:
+    value = match.group(0)
+    if value.count(":") >= 2 and "." not in value:
+        if "::" not in value and value.count(":") < 5:
+            return value
+    return REMOVED_SECRET
+
+
+def _mixed_token_removed(match: re.Match[str]) -> str:
+    token = match.group(0)
+    if re.search(r"\d", token) and re.search(r"[A-Za-z]", token):
+        return REMOVED_SECRET
+    return token
 
 
 def _seed_machine_display_values(
@@ -268,31 +323,100 @@ def _question_terms(value: str) -> list[str]:
     ]
 
 
+@dataclass(frozen=True)
+class _AnswerSegment:
+    text: str
+    url: str | None = None
+
+
 def materialize_chat_response(
-    response: ProviderAIChatResponse,
+    answer: ProviderChatAnswer,
     finding_ids_by_ref: dict[str, UUID],
     display_values_by_ref: dict[str, str],
 ) -> AIChatResponse:
-    """Resolve provider placeholders, rejecting any reference we did not send."""
-    used = set(response.referenced_finding_refs)
-    for text in (response.answer, *response.uncertainties):
-        used.update(reference_names(text))
-    unknown = used - set(finding_ids_by_ref) - set(display_values_by_ref)
-    if unknown:
+    """Build the answer text, keeping only links the provider cited and consulted."""
+    segments = _answer_segments(answer)
+    used = [
+        reference
+        for segment in segments
+        if segment.url is None
+        for reference in reference_names(segment.text)
+    ]
+    if set(used) - set(finding_ids_by_ref) - set(display_values_by_ref):
         raise AIProviderError("invalid_provider_response", retryable=True)
-    if set(response.referenced_finding_refs) - set(finding_ids_by_ref):
-        raise AIProviderError("invalid_provider_response", retryable=True)
+    safe_values = {
+        reference: value.translate(_MARKUP_FREE)
+        for reference, value in display_values_by_ref.items()
+    }
+    text = "".join(
+        replace_ai_references(segment.text, safe_values)
+        if segment.url is None
+        else f"[{_source_label(segment.url)}]({_link_target(segment.url)})"
+        for segment in segments
+    )
+    text = _tidy(_EMPTY_PARENS.sub("", text))
+    if len(text) < 3:
+        raise AIProviderError("invalid_provider_response", retryable=False)
     return AIChatResponse(
-        answer=replace_ai_references(response.answer, display_values_by_ref),
-        uncertainties=[
-            replace_ai_references(item, display_values_by_ref)
-            for item in response.uncertainties
-        ],
+        answer=text,
+        uncertainties=[],
         referenced_finding_ids=[
             finding_ids_by_ref[reference]
-            for reference in response.referenced_finding_refs
+            for reference in dict.fromkeys(used)
+            if reference in finding_ids_by_ref
         ],
     )
+
+
+_MARKUP_FREE = str.maketrans({"[": "(", "]": ")", "*": None})
+
+
+def _answer_segments(answer: ProviderChatAnswer) -> list[_AnswerSegment]:
+    consulted = {clean_source_url(url) for url in answer.sources} - {None}
+    segments: list[_AnswerSegment] = []
+    for part in answer.parts:
+        cursor = 0
+        for citation in sorted(part.citations, key=lambda item: item.start):
+            if (
+                citation.start < cursor
+                or citation.start >= citation.end
+                or citation.end > len(part.text)
+            ):
+                continue
+            segments.append(
+                _AnswerSegment(_clean_answer_text(part.text[cursor : citation.start]))
+            )
+            url = clean_source_url(citation.url)
+            if url in consulted:
+                segments.append(_AnswerSegment("", url))
+            cursor = citation.end
+        segments.append(_AnswerSegment(_clean_answer_text(part.text[cursor:])))
+    return segments
+
+
+def _clean_answer_text(value: str) -> str:
+    text = _WRAPPED_LINK.sub("", value)
+    text = _MARKDOWN_LINK.sub(r"\1", text)
+    text = _RAW_URL.sub("", text)
+    text = _HTML_TAG.sub("", text)
+    text = _HEADING.sub("", text).replace("`", "")
+    return scrub_secrets(text, addresses=False)
+
+
+def _tidy(text: str) -> str:
+    text = re.sub(r"(?<=\S)[ \t]{2,}", " ", text)
+    text = re.sub(r"[ \t]+([.,;:!?])", r"\1", text)
+    text = "\n".join(line.rstrip() for line in text.split("\n"))
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _source_label(url: str) -> str:
+    host = url.split("://", 1)[1].split("/", 1)[0]
+    return host.removeprefix("www.")
+
+
+def _link_target(url: str) -> str:
+    return url.replace("(", "%28").replace(")", "%29").replace(" ", "%20")
 
 
 def save_chat_message(

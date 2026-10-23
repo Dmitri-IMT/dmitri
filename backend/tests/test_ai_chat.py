@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
-from api.schemas.ai import ProviderAIChatResponse
 from api.schemas.read import (
     FindingEvidenceConfidenceCounts,
     FindingEvidenceMethodCounts,
@@ -20,8 +19,20 @@ from api.services.ai.chat import (
     build_host_chat_bundle,
     build_scan_chat_bundle,
     materialize_chat_response,
+    scrub_secrets,
 )
-from api.services.ai.openai_responses import AIProviderError
+from api.services.ai.openai_responses import (
+    AIProviderError,
+    ChatTextPart,
+    ProviderChatAnswer,
+    UrlCitation,
+)
+
+
+def _answer(text: str) -> ProviderChatAnswer:
+    return ProviderChatAnswer(
+        parts=(ChatTextPart(text=text, citations=()),), sources=frozenset()
+    )
 
 
 def _finding(
@@ -278,11 +289,7 @@ def test_host_chat_uses_full_aggregate_summary_with_bounded_rows() -> None:
 def test_materialize_chat_response_substitutes_display_values() -> None:
     finding_id = uuid4()
     response = materialize_chat_response(
-        ProviderAIChatResponse(
-            answer="Revise finding_1 on machine_1.",
-            uncertainties=["machine_1 may need follow-up."],
-            referenced_finding_refs=["finding_1"],
-        ),
+        _answer("Revise finding_1 on machine_1."),
         {"finding_1": finding_id},
         {
             "finding_1": "Weak SSH configuration",
@@ -298,13 +305,91 @@ def test_materialize_chat_response_rejects_an_unsent_placeholder() -> None:
     """An unknown token in the prose must fail as a provider error, not a KeyError."""
     with pytest.raises(AIProviderError) as caught:
         materialize_chat_response(
-            ProviderAIChatResponse(
-                answer="Check machine_9 as well.",
-                uncertainties=[],
-                referenced_finding_refs=["finding_1"],
-            ),
+            _answer("Check machine_9 as well."),
             {"finding_1": uuid4()},
             {"finding_1": "Weak SSH configuration"},
         )
 
     assert caught.value.code == "invalid_provider_response"
+
+
+def test_materialize_chat_response_keeps_only_cited_and_consulted_links() -> None:
+    text = (
+        "**Update** the camera ([vendor.example.com](https://vendor.example.com/a)).\n"
+        "## Steps\n"
+        "1. Read [the forum](https://forum.example.com/t) at https://x.example/y\n"
+        "- Ask <b>IT</b> to check `config` (see [other](https://other.example.com))."
+    )
+    start = text.index("[vendor")
+    end = text.index(")).") + 1
+    forum_start = text.index("[the forum")
+    answer = ProviderChatAnswer(
+        parts=(
+            ChatTextPart(
+                text=text,
+                citations=(
+                    UrlCitation(
+                        start=start,
+                        end=end,
+                        url="https://www.vendor.example.com/a?utm_source=openai",
+                    ),
+                    UrlCitation(
+                        start=forum_start,
+                        end=forum_start + len("[the forum](https://forum.example.com/t)"),
+                        url="https://forum.example.com/t",
+                    ),
+                ),
+            ),
+        ),
+        sources=frozenset({"https://www.vendor.example.com/a"}),
+    )
+
+    response = materialize_chat_response(answer, {}, {})
+
+    assert response.answer == (
+        "**Update** the camera ([vendor.example.com](https://www.vendor.example.com/a)).\n"
+        "Steps\n"
+        "1. Read at\n"
+        "- Ask IT to check config (see other)."
+    )
+    assert response.uncertainties == []
+
+
+def test_materialize_chat_response_neutralises_markup_in_display_values() -> None:
+    finding_id = uuid4()
+
+    response = materialize_chat_response(
+        _answer("Fix finding_1 first."),
+        {"finding_1": finding_id},
+        {"finding_1": "[x](https://evil.example) **bad**"},
+    )
+
+    assert response.answer == "Fix (x)(https://evil.example) bad first."
+    assert response.referenced_finding_ids == [finding_id]
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("my password: hunter2 please", "my password: [removed] please"),
+        ("api key=abc and token: xyz", "api key=[removed] and token: [removed]"),
+        ("Bearer eyJabc.def.ghi", "[removed]"),
+        ("key sk-abcdefghijklmnop1234", "key [removed]"),
+        ("why is 192.168.1.10 open", "why is [removed] open"),
+        ("mac aa:bb:cc:dd:ee:ff", "mac [removed]"),
+        ("router fe80::1:2:3 at 10:30:15", "router [removed] at 10:30:15"),
+        ("blob A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6", "blob [removed]"),
+        ("how do I fix CVE-2026-1234 on OpenSSH 9.2p1", None),
+    ],
+)
+def test_scrub_secrets(question, expected) -> None:
+    assert scrub_secrets(question) == (question if expected is None else expected)
+
+
+def test_answer_scrubbing_keeps_addresses_but_removes_tokens() -> None:
+    assert (
+        scrub_secrets(
+            "Open 192.168.1.1 and use sk-abcdefghijklmnop1234", addresses=False
+        )
+        == "Open 192.168.1.1 and use [removed]"
+    )

@@ -15,6 +15,7 @@ from api.schemas.ai import ProviderCVEFixResearch, ProviderFixOption
 from api.services.ai.context import build_scan_ai_context
 from api.services.ai.openai_responses import AIProviderError
 from api.services.ai.research import (
+    attach_cached_fix_records,
     attach_fix_records,
     clean_source_url,
     sourced_fix_record,
@@ -229,3 +230,23 @@ def test_sourced_fix_record_cleans_text_and_puts_the_easiest_full_fix_first():
 )
 def test_clean_source_url(url, expected):
     assert clean_source_url(url) == expected
+
+
+def test_chat_reads_current_records_without_researching(administrative_session):
+    scan = _scan(administrative_session)
+    now = datetime.now(timezone.utc)
+    _attach(
+        administrative_session,
+        scan,
+        _Provider({"CVE-2026-0001": (_research(_option()), {ADVISORY})}),
+        now,
+    )
+    context = build_scan_ai_context(administrative_session, scan)
+    assert context.top_findings[0].fix_options == []
+
+    attach_cached_fix_records(administrative_session, context.top_findings, now=now)
+
+    assert context.top_findings[0].product == "openbsd openssh"
+    assert [option.fixed_version for option in context.top_findings[0].fix_options] == [
+        "9.3p2"
+    ]

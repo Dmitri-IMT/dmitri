@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -25,15 +26,19 @@ from api.services.ai.chat import (
     build_finding_chat_bundle,
     build_host_chat_bundle,
     build_scan_chat_bundle,
+    context_findings,
     list_chat_messages,
     save_chat_message,
+    scrub_secrets,
 )
 from api.services.ai.chat_errors import chat_api_error_message
+from api.services.ai.context import describe_observed_products
 from api.services.ai.openai_responses import (
     AIProviderError,
     ai_is_available,
     build_ai_provider,
 )
+from api.services.ai.research import attach_cached_fix_records
 from api.services.ai.telemetry import drain_provider_usage, persist_usage_events
 from api.services.read import (
     get_finding_detail,
@@ -146,6 +151,24 @@ def ask_context_chat(
 ) -> AIChatResponse:
     if not ai_is_available(settings):
         raise ApiError(503, "The AI assistant is unavailable.", code="ai_unavailable")
+    now = datetime.now(timezone.utc)
+    asked_today = session.exec(
+        select(func.count(AIUsageRecord.id)).where(
+            AIUsageRecord.user_id == caller.sub,
+            AIUsageRecord.operation == "chat",
+            AIUsageRecord.created_at >= now - timedelta(days=1),
+        )
+    ).one()
+    if asked_today >= settings.ai_chat_daily_limit:
+        raise ApiError(
+            429,
+            chat_api_error_message(
+                "ai_daily_limit",
+                language=payload.language,
+                limit=settings.ai_chat_daily_limit,
+            ),
+            code="ai_daily_limit",
+        )
     resolved = _build_context(
         session,
         payload.scope,
@@ -156,6 +179,9 @@ def ask_context_chat(
     if resolved is None:
         raise HTTPException(status_code=404, detail="Context not found")
     bundle, scan_id = resolved
+    findings = context_findings(bundle.provider_context)
+    describe_observed_products(session, findings, bundle.finding_ids_by_ref)
+    attach_cached_fix_records(session, findings, now=now)
     provider = build_ai_provider(settings)
     assert provider is not None
     try:
@@ -177,7 +203,7 @@ def ask_context_chat(
             session,
             scan_id=scan_id,
             user_id=caller.sub,
-            question=payload.question,
+            question=scrub_secrets(payload.question),
             response=response,
             scope_type=payload.scope,
             scope_id=payload.context_id,

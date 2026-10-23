@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     ai_research_max_tool_calls: int = Field(
         default=10, ge=1, le=20, alias="AI_RESEARCH_MAX_TOOL_CALLS"
     )
+    ai_chat_max_tool_calls: int = Field(
+        default=10, ge=1, le=20, alias="AI_CHAT_MAX_TOOL_CALLS"
+    )
+    ai_chat_daily_limit: int = Field(
+        default=30, ge=1, le=1000, alias="AI_CHAT_DAILY_LIMIT"
+    )
+    ai_search_country: str | None = Field(
+        default=None, pattern=r"^[A-Z]{2}$", alias="AI_SEARCH_COUNTRY"
+    )
+    ai_search_timezone: str | None = Field(default=None, alias="AI_SEARCH_TIMEZONE")
     ai_poll_interval_seconds: float = Field(
         default=5.0,
         alias="AI_POLL_INTERVAL_SECONDS",

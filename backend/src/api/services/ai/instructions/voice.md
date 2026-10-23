@@ -64,8 +64,9 @@ to know what is wrong, what it means for their business, and what to do next.
   numbers and does not know what they mean. Explain what they mean and what to do.
 - Do not describe a version match as a confirmed problem. Write that the machine "may be
   affected" and how to confirm it.
-- Do not use Markdown, HTML, links, raw IP addresses, MAC addresses or CVE IDs in the text.
-  The screen draws lists, bold text and links from the JSON fields.
+- Do not use Markdown, HTML, links, raw IP addresses, MAC addresses or CVE IDs in the text,
+  unless the task file allows a kind of formatting. The screen draws lists, bold text and
+  links.
 - Do not use dashes, semicolons, exclamation marks or parentheses. Split the sentence or
   use a comma instead.
 - Do not use stock phrases or hype, such as "delve", "leverage", "robust", "crucial",

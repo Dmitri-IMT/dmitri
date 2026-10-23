@@ -29,7 +29,7 @@ class AIContextChatRequest(AIChatRequest):
 class AIChatResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    answer: AIText
+    answer: Annotated[str, Field(min_length=3, max_length=8000)]
     uncertainties: Annotated[list[AIShortText], Field(max_length=10)]
     referenced_finding_ids: Annotated[list[UUID], Field(max_length=15)]
 
@@ -81,14 +81,6 @@ class AIUsageResponse(BaseModel):
 
     summary: AIUsageSummary
     data: list[AIUsageEntry]
-
-
-class ProviderAIChatResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    answer: AIText
-    uncertainties: Annotated[list[AIShortText], Field(max_length=10)]
-    referenced_finding_refs: Annotated[list[FindingReference], Field(max_length=15)]
 
 
 class AIRecommendedAction(BaseModel):

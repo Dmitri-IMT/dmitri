@@ -6,7 +6,6 @@ import httpx
 import pytest
 from api.core.config import Settings
 from api.schemas.ai import (
-    ProviderAIChatResponse,
     ProviderScanAIAnalysis,
     ProviderScanAIChildAnalysis,
 )
@@ -279,7 +278,7 @@ def test_instructions_keep_evidence_uncertainty_and_sample_limits():
         _context()
     )
 
-    assert AI_PROMPT_VERSION == "9"
+    assert AI_PROMPT_VERSION == "10"
     instructions = _flat(captured["payload"]["instructions"])
     for rule in (
         "inconclusive, conflicting or truncated evidence is never a confirmed problem",
@@ -478,15 +477,37 @@ def test_provider_fails_terminally_on_unusable_responses(body, code):
     assert captured.value.retryable is False
 
 
-def test_provider_answers_chat_with_bounded_structured_schema():
+def test_chat_answers_in_plain_text_with_web_search_and_citations():
     captured: dict[str, object] = {}
-    answer = ProviderAIChatResponse(
-        answer="Priorize a atualização do serviço exposto.",
-        uncertainties=["O scan não confirma exploração ativa."],
-        referenced_finding_refs=["finding_1"],
-    )
+    text = "Atualize o firmware ([vendor.example.com](https://vendor.example.com/a))."
 
-    result = _provider(_capture(captured, answer.model_dump_json())).answer_question(
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        envelope = _completed(text)
+        envelope["output"][1]["content"][0]["annotations"] = [
+            {
+                "type": "url_citation",
+                "start_index": 20,
+                "end_index": len(text) - 1,
+                "url": "https://vendor.example.com/a?utm_source=openai",
+                "title": "Advisory",
+            }
+        ]
+        envelope["output"].insert(
+            0,
+            {
+                "type": "web_search_call",
+                "status": "completed",
+                "action": {
+                    "type": "search",
+                    "queries": ["vendor firmware CVE-2026-0001"],
+                    "sources": [{"type": "url", "url": "https://vendor.example.com/a"}],
+                },
+            },
+        )
+        return httpx.Response(200, json=envelope)
+
+    result = _provider(handler).answer_question(
         FindingChatContext(
             finding=AIFindingContext(
                 finding_ref="finding_1",
@@ -521,25 +542,27 @@ def test_provider_answers_chat_with_bounded_structured_schema():
         "O que devo corrigir primeiro?",
     )
 
-    assert result.answer.startswith("Priorize")
+    assert result.parts[0].text == text
+    assert result.parts[0].citations[0].start == 20
+    assert result.sources == {"https://vendor.example.com/a"}
     payload = captured["payload"]
-    assert payload["text"]["format"]["name"] == "scan_ai_chat"
+    assert "text" not in payload
+    assert payload["tools"] == [
+        {
+            "type": "web_search",
+            "search_context_size": "medium",
+            "user_location": {"type": "approximate"},
+        }
+    ]
+    assert payload["max_tool_calls"] == 10
+    assert payload["include"] == ["web_search_call.action.sources"]
+    assert payload["store"] is False
     assert payload["instructions"].startswith("# Voice")
     assert "# Task: answer the owner's question" in payload["instructions"]
-    assert "# Correction pass" not in payload["instructions"]
-    assert payload["text"]["format"]["strict"] is True
-    assert payload["max_output_tokens"] == 1024
-    assert payload["store"] is False
-    assert "tools" not in payload
     submitted = payload["input"]
+    assert submitted.startswith("USER_QUESTION:")
     assert "O que devo corrigir primeiro?" in submitted
     assert '"evidence_status":"inconclusive"' in submitted
-    assert '"evidence_truncated":true' in submitted
-    assert '"scope":"filtered_findings"' in submitted
-    assert submitted.startswith("USER_QUESTION:")
-    assert "It never shows that a machine is free of vulnerabilities" in _flat(
-        payload["instructions"]
-    )
 
 
 def test_research_fix_searches_the_web_and_returns_consulted_sources():
@@ -611,3 +634,13 @@ def test_build_ai_provider_uses_settings_and_requires_a_key(
     assert provider.model == "gpt-6-luna"
     assert provider.reasoning_effort == "high"
     assert provider.max_output_tokens == 25_000
+    assert provider.search_location == {"type": "approximate"}
+
+    monkeypatch.setenv("AI_SEARCH_COUNTRY", "BR")
+    monkeypatch.setenv("AI_SEARCH_TIMEZONE", "America/Sao_Paulo")
+    provider = build_ai_provider(Settings(_env_file=None))
+    assert provider.search_location == {
+        "type": "approximate",
+        "country": "BR",
+        "timezone": "America/Sao_Paulo",
+    }

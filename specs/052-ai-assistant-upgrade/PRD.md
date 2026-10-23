@@ -262,7 +262,25 @@ six places. Each place answers one question the user has:
    `instructions/research.md`, table `ai_fix_records` in migration `20261023_45`,
    `AI_PROMPT_VERSION` 9, `AI_CONTEXT_VERSION` 6). Research runs inside the analysis job,
    up to 5 calls in parallel. The AI job stale window is now `AI_TIMEOUT_SECONDS × 10`.
-5. R4 + R5 + waiting state — chat search, source links, loader.
+5. R4 + R5 + waiting state — chat search, source links, loader. **R4 and R5 built
+   2026-10-23**; the loader is not built yet.
+   - Chat is plain text with `web_search` (`AI_CHAT_MAX_TOOL_CALLS`). The backend keeps a
+     citation only when its URL is in `action.sources`, writes it as a `[host](url)` link,
+     and removes every other link, raw URL, HTML, heading and code mark. Display values are
+     stripped of `[`, `]` and `*` before they go into the text.
+   - `user_location` comes from `AI_SEARCH_COUNTRY` / `AI_SEARCH_TIMEZONE`, not from the
+     organisation: organisations have no country or timezone field. Unset sends
+     `{"type": "approximate"}`, which avoids the United States default.
+   - Guardrail 5 scrubs credentials and IP, MAC and IPv6 addresses from the question
+     before the call and in the saved history; answers are scrubbed of credentials only,
+     so vendor steps such as "open 192.168.1.1" survive.
+   - Guardrail 6: `AI_CHAT_DAILY_LIMIT` (30) questions per user in a rolling 24 hours,
+     counted from `ai_usage` chat rows; over the limit returns 429 `ai_daily_limit`.
+   - The chat linter cleans instead of rejecting: a repair call would double a search
+     answer's wait.
+   - Product, version and service come from the port CPE only, for analysis, research and
+     chat. Raw banners are no longer sent, because a banner can hold a hostname.
+   - `uncertainties` stays in the API for old messages; new answers return `[]`.
 6. R6 entry point — separate issue.
 
 ## Success check
