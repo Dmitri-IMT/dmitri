@@ -52,7 +52,9 @@ class ExplanationProvider:
 @pytest.fixture
 def provider(monkeypatch):
     settings = get_settings().model_copy(update={
-        "ai_enabled": True, "ai_api_key": "test-key", "ai_chat_daily_limit": 2,
+        "ai_enabled": True,
+        "ai_api_key": "test-key",  # pragma: allowlist secret
+        "ai_chat_daily_limit": 2,
     })
     app.dependency_overrides[get_settings] = lambda: settings
     result = ExplanationProvider()
