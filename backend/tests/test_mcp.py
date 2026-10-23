@@ -64,7 +64,7 @@ def mcp_client(monkeypatch, migrated_database):
 def member(administrative_session, seeded_org):
     user = User(
         org_id=seeded_org.id, email="mcp@example.test", role="admin",
-        password_hash="not-used-by-this-test",
+        password_hash="x",  # unused: these tests never authenticate
     )
     administrative_session.add(user)
     administrative_session.commit()
