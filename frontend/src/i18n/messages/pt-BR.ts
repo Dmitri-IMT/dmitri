@@ -356,8 +356,17 @@ export const catalog: Catalog = {
     'Obtenha um resumo desta varredura em linguagem simples.',
   'ai.unavailableOverview':
     'O resumo por IA está desativado para esta varredura. Os resultados continuam disponíveis.',
-  'ai.preparingOverview':
-    'Preparando um resumo desta varredura em linguagem simples.',
+  'ai.waiting.chatStage': 'Procurando uma resposta',
+  'ai.waiting.chatDetail': 'Isso pode levar até um minuto',
+  'ai.waiting.cancel': 'Cancelar',
+  'ai.waiting.queuedStage': 'Aguardando para começar',
+  'ai.waiting.fixesStage': 'Buscando correções do fabricante',
+  'ai.waiting.groupsStage': 'Encontrando as correções mais fáceis',
+  'ai.waiting.summaryStage': 'Escrevendo o resumo',
+  'ai.waiting.scanDetail':
+    'Normalmente de 2 a 4 minutos. Você pode sair desta página.',
+  'ai.waiting.groupDetail': ({ n, m }) =>
+    `Lendo o grupo ${n} de ${m} · normalmente de 2 a 4 minutos`,
   'ai.completedDescription':
     'Interpretação em linguagem simples das evidências registradas nesta varredura.',
   'ai.whatToDoFirst': 'O que fazer primeiro',

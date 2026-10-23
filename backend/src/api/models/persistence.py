@@ -490,6 +490,9 @@ class AIScanAnalysisRecord(SQLModel, table=True):
     failed_findings: int = 0
     total_findings: int = 0
     context_hash: str | None = None
+    progress_stage: str | None = None
+    progress_done: int | None = None
+    progress_total: int | None = None
     attempts: int = 0
     last_error: str | None = None
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)

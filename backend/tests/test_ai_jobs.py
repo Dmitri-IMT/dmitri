@@ -22,7 +22,10 @@ from api.schemas.read import (
 )
 from api.services.ai.analyzer import validate_analysis_with_repair
 from api.services.ai.context import AIFindingContext, ScanAIContext
-from api.services.ai.jobs import process_ready_ai_analyses
+from api.services.ai.jobs import (
+    process_ready_ai_analyses,
+    scan_ai_analysis_response,
+)
 from api.services.ai.openai_responses import AIProviderError
 from api.services.worker import run_ai_worker_once
 from pydantic import ValidationError
@@ -214,6 +217,10 @@ def test_bounded_job_records_failed_child_coverage(administrative_session):
         )
     _pending_analysis(administrative_session, scan)
     calls = []
+    progress = []
+
+    def _record():
+        return administrative_session.exec(select(AIScanAnalysisRecord)).one()
 
     class BoundedProvider:
         def analyze_scan(self, context, *, language="en"):
@@ -224,6 +231,7 @@ def test_bounded_job_records_failed_child_coverage(administrative_session):
 
         def analyze_chunk(self, context, *, language="en"):
             calls.append([item.finding_ref for item in context.top_findings])
+            progress.append(scan_ai_analysis_response(_record()).progress)
             if len(context.top_findings) == 5:
                 raise AIProviderError("provider_timeout", retryable=True)
             return ProviderScanAIChildAnalysis(
@@ -238,6 +246,7 @@ def test_bounded_job_records_failed_child_coverage(administrative_session):
         ):
             assert len(child_results) == 1
             assert len(failed_refs) == 5
+            progress.append(scan_ai_analysis_response(_record()).progress)
             return _analysis()
 
     assert _run(
@@ -249,6 +258,10 @@ def test_bounded_job_records_failed_child_coverage(administrative_session):
     assert record.analyzed_findings == 1
     assert record.failed_findings == 5
     assert record.total_findings == 6
+    assert [
+        (item.stage, item.done, item.total) for item in progress
+    ] == [("groups", 0, 2), ("groups", 1, 2), ("summary", 2, 2)]
+    assert scan_ai_analysis_response(record).status == "completed"
 
 
 def test_unknown_provider_reference_is_repaired_before_materialization(

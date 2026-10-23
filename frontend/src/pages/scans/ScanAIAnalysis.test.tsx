@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import ScanAIAnalysis from './ScanAIAnalysis'
@@ -95,15 +95,38 @@ function renderAnalysis() {
 }
 
 describe('ScanAIAnalysis', () => {
-  it.each(['pending', 'processing'] as const)(
-    'keeps deterministic results available while analysis is %s',
-    async (status) => {
-      serve({ ...job, status })
+  it.each([
+    ['pending', undefined, 'Waiting to start', 'Usually 2 to 4 minutes.'],
+    [
+      'processing',
+      { stage: 'fixes', done: 0, total: 0 },
+      'Looking up vendor fixes',
+      'Usually 2 to 4 minutes.',
+    ],
+    [
+      'processing',
+      { stage: 'groups', done: 2, total: 7 },
+      'Finding the easiest fixes',
+      'Reading group 3 of 7 · usually 2 to 4 minutes',
+    ],
+    [
+      'processing',
+      { stage: 'summary', done: 7, total: 7 },
+      'Writing the summary',
+      'Usually 2 to 4 minutes.',
+    ],
+  ] as const)(
+    'shows the waiting state while analysis is %s %j',
+    async (status, progress, stage, detail) => {
+      serve({ ...job, status, progress })
       renderAnalysis()
 
-      const panel = await screen.findByTestId('scan-ai-pending')
-      expect(panel).toHaveTextContent(
-        'Preparing a plain-language overview of this scan.',
+      const waiting = await screen.findByTestId('todo-waiting')
+      expect(within(waiting).getByRole('status')).toHaveTextContent(stage)
+      expect(waiting).toHaveTextContent(detail)
+      expect(screen.getByTestId('todo-waiting-elapsed')).toHaveAttribute(
+        'aria-hidden',
+        'true',
       )
       expect(screen.queryByTestId('scan-ai-request')).not.toBeInTheDocument()
     },

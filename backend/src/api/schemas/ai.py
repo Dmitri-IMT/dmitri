@@ -217,8 +217,17 @@ class _ScanAIAnalysisJob(BaseModel):
     updated_at: datetime
 
 
+class ScanAIAnalysisProgress(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stage: Literal["fixes", "groups", "summary"]
+    done: Annotated[int, Field(ge=0)]
+    total: Annotated[int, Field(ge=0)]
+
+
 class ScanAIAnalysisQueued(_ScanAIAnalysisJob):
     status: Literal["pending", "processing"]
+    progress: ScanAIAnalysisProgress | None = None
 
 
 class ScanAIAnalysisFailed(_ScanAIAnalysisJob):

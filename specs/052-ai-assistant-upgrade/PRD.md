@@ -263,7 +263,14 @@ six places. Each place answers one question the user has:
    `AI_PROMPT_VERSION` 9, `AI_CONTEXT_VERSION` 6). Research runs inside the analysis job,
    up to 5 calls in parallel. The AI job stale window is now `AI_TIMEOUT_SECONDS × 10`.
 5. R4 + R5 + waiting state — chat search, source links, loader. **R4 and R5 built
-   2026-10-23**; the loader is not built yet.
+   2026-10-23**. **Loader built 2026-10-23** (`components/WaitingState.tsx`, DESIGN.md §9):
+   used in chat (with Cancel, which aborts the request; the server still finishes and
+   counts it) and in the scan overview. The analysis job now saves its stage
+   (`fixes`, `groups`, `summary`) and group count in `ai_scan_analyses.progress_*`
+   (migration `20261023_46`), returned as `progress` on pending and processing responses.
+   Elapsed time counts from the job's `created_at`. Scan polling now stops after 20
+   minutes, not 5, to match the job's stale window. The grid gap is 4px in both sizes,
+   because the spacing scale has no 2px or 3px step.
    - Chat is plain text with `web_search` (`AI_CHAT_MAX_TOOL_CALLS`). The backend keeps a
      citation only when its URL is in `action.sources`, writes it as a `[host](url)` link,
      and removes every other link, raw URL, HTML, heading and code mark. Display values are

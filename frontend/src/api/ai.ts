@@ -21,13 +21,18 @@ export async function askContextAI(
   contextId: string,
   question: string,
   language: AILanguage = 'en',
+  signal?: AbortSignal,
 ): Promise<AIChatResponse> {
-  const response = await apiClient.post<AIChatResponse>('/ai/chat', {
-    scope,
-    context_id: contextId,
-    question,
-    language,
-  })
+  const response = await apiClient.post<AIChatResponse>(
+    '/ai/chat',
+    {
+      scope,
+      context_id: contextId,
+      question,
+      language,
+    },
+    { signal },
+  )
   return response.data
 }
 

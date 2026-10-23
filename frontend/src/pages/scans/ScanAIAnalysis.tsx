@@ -8,6 +8,7 @@ import {
 } from '@/api/scans'
 import { queryKeys } from '@/api/queryKeys'
 import Disclosure from '@/components/Disclosure'
+import WaitingState from '@/components/WaitingState'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import type { components } from '@/types/openapi'
@@ -18,10 +19,44 @@ type FindingRecord = components['schemas']['FindingRecord']
 type EvidenceCompleteness = components['schemas']['EvidenceCompleteness']
 
 const ANALYSIS_POLL_INTERVAL_MS = 3_000
-const ANALYSIS_POLL_MAX_MS = 5 * 60 * 1_000
+const ANALYSIS_POLL_MAX_MS = 20 * 60 * 1_000
 
 function waitingForAnalysis(status: ScanAIAnalysisResponse['status']): boolean {
   return status === 'pending' || status === 'processing'
+}
+
+type QueuedAnalysis = components['schemas']['ScanAIAnalysisQueued']
+
+function AnalysisWaiting({ analysis }: { analysis: QueuedAnalysis }) {
+  const { t } = useI18n()
+  const progress = analysis.progress ?? null
+  const stage =
+    progress === null
+      ? analysis.status === 'pending'
+        ? t('ai.waiting.queuedStage')
+        : t('ai.waiting.groupsStage')
+      : t(`ai.waiting.${progress.stage}Stage`)
+  const detail =
+    progress?.stage === 'groups' && progress.total > 0
+      ? t('ai.waiting.groupDetail', {
+          n: Math.min(progress.done + 1, progress.total),
+          m: progress.total,
+        })
+      : t('ai.waiting.scanDetail')
+  return (
+    <WaitingState
+      size="large"
+      stage={stage}
+      detail={detail}
+      startedAt={Date.parse(analysis.created_at)}
+      progress={
+        progress !== null && progress.stage !== 'fixes'
+          ? { done: progress.done, total: progress.total }
+          : undefined
+      }
+      testId="todo-waiting"
+    />
+  )
 }
 
 function ScanAIAnalysis({
@@ -171,14 +206,12 @@ function ScanAIAnalysis({
     case 'pending':
     case 'processing':
       return (
-        <Card data-testid="scan-ai-pending" aria-live="polite">
+        <Card data-testid="scan-ai-pending">
           <CardHeader>
             <h2 className="text-title-sm">{t('ai.overview')}</h2>
           </CardHeader>
           <CardContent>
-            <p className="text-body-md text-muted-foreground">
-              {t('ai.preparingOverview')}
-            </p>
+            <AnalysisWaiting analysis={query.data} />
           </CardContent>
         </Card>
       )

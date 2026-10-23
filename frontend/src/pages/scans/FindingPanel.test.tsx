@@ -241,6 +241,7 @@ describe('FindingPanel risk', () => {
       criticalFinding.finding_id,
       'Explain this vulnerability in plain language and tell me what to do.',
       'en',
+      expect.any(AbortSignal),
     )
     expect(
       screen.queryByRole('button', { name: 'Explain with AI' }),

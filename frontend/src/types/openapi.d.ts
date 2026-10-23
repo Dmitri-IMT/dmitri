@@ -2591,6 +2591,13 @@ export interface components {
              * @enum {string}
              */
             status: "pending" | "processing";
+            progress?: components["schemas"]["ScanAIAnalysisProgress"] | null;
+        };
+        ScanAIAnalysisProgress: {
+            /** @enum {string} */
+            stage: "fixes" | "groups" | "summary";
+            done: number;
+            total: number;
         };
         ScanAIAnalysisFailed: {
             /** Format: uuid */

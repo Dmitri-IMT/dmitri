@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { isCancel } from 'axios'
 import {
   askContextAI,
   getContextAIHistory,
@@ -6,6 +7,7 @@ import {
 } from '@/api/ai'
 import type { AIChatHistoryResponse } from '@/api/ai'
 import ChatAnswer from '@/components/ChatAnswer'
+import WaitingState from '@/components/WaitingState'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
@@ -43,6 +45,8 @@ export default function ContextChat({
   const [historyVisible, setHistoryVisible] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [sending, setSending] = useState(false)
+  const [sentAt, setSentAt] = useState(0)
+  const pendingAsk = useRef<AbortController | null>(null)
   const visibleMessages = historyVisible
     ? messages
     : messages.filter((m) => m.message_id.startsWith('local-'))
@@ -66,9 +70,18 @@ export default function ContextChat({
 
   async function ask(asked: string) {
     if (asked.length < 3 || sending) return
+    const controller = new AbortController()
+    pendingAsk.current = controller
+    setSentAt(Date.now())
     setSending(true)
     try {
-      const response = await askContextAI(scope, contextId, asked, language)
+      const response = await askContextAI(
+        scope,
+        contextId,
+        asked,
+        language,
+        controller.signal,
+      )
       setMessages((current) => [
         ...current,
         {
@@ -82,11 +95,14 @@ export default function ContextChat({
       ])
       setQuestion('')
     } catch (caught) {
-      show(readAiAskError(caught, t('ai.genericError')))
+      if (!isCancel(caught)) show(readAiAskError(caught, t('ai.genericError')))
     } finally {
+      pendingAsk.current = null
       setSending(false)
     }
   }
+
+  useEffect(() => () => pendingAsk.current?.abort(), [])
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -145,6 +161,7 @@ export default function ContextChat({
               onChange={(event) => setQuestion(event.target.value)}
               placeholder={resolvedPlaceholder}
               maxLength={1000}
+              disabled={sending}
             />
             <Button
               type="submit"
@@ -155,6 +172,18 @@ export default function ContextChat({
               {sending ? t('ai.asking') : t('ai.ask')}
             </Button>
           </form>
+        )}
+        {sending && (
+          <WaitingState
+            size="small"
+            stage={t('ai.waiting.chatStage')}
+            detail={t('ai.waiting.chatDetail')}
+            startedAt={sentAt}
+            cancelLabel={t('ai.waiting.cancel')}
+            onCancel={() => pendingAsk.current?.abort()}
+            testId="assistant-waiting"
+            cancelTestId="assistant-cancel"
+          />
         )}
         {historyVisible && loadingHistory && (
           <p className="text-body-sm text-muted-foreground">

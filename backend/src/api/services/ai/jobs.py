@@ -21,6 +21,7 @@ from api.schemas.ai import (
     ScanAIAnalysisCompleted,
     ScanAIAnalysisFailed,
     ScanAIAnalysisNotRequested,
+    ScanAIAnalysisProgress,
     ScanAIAnalysisQueued,
     ScanAIAnalysisResponse,
     ScanAIAnalysisUnavailable,
@@ -85,7 +86,18 @@ def scan_ai_analysis_response(
         )
     if record.status == "failed":
         return ScanAIAnalysisFailed(**fields, completed_at=record.completed_at)
-    return ScanAIAnalysisQueued(**fields)
+    return ScanAIAnalysisQueued(
+        **fields,
+        progress=(
+            ScanAIAnalysisProgress(
+                stage=record.progress_stage,
+                done=record.progress_done or 0,
+                total=record.progress_total or 0,
+            )
+            if record.status == "processing" and record.progress_stage is not None
+            else None
+        ),
+    )
 
 
 def get_scan_ai_analysis(
@@ -161,6 +173,9 @@ def request_scan_ai_analysis(
         record.next_attempt_at = None
         record.analysis_json = None
         record.context_hash = None
+        record.progress_stage = None
+        record.progress_done = None
+        record.progress_total = None
         record.started_at = None
         record.completed_at = None
         session.add(record)
@@ -338,6 +353,13 @@ def _process_claimed_analysis(
     if scan is None or scan.org_id is None:
         return fail("scan_unavailable", False)
 
+    def report(stage: str, done: int, total: int) -> None:
+        record.progress_stage = stage
+        record.progress_done = done
+        record.progress_total = total
+        session.add(record)
+        session.commit()
+
     phase = "context_build"
     try:
         context = build_scan_ai_context(
@@ -348,12 +370,13 @@ def _process_claimed_analysis(
         if context is not None:
             if supports_fix_research(provider):
                 phase = "fix_research"
+                report("fixes", 0, 0)
                 attach_fix_records(
                     session, context, provider, settings=get_settings(), now=now
                 )
             phase = "provider_analysis"
             provider_analysis, coverage = run_bounded_analysis(
-                provider, context, language=record.language
+                provider, context, language=record.language, on_progress=report
             )
         phase = "materialization"
         analysis = (

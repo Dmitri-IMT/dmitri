@@ -350,7 +350,17 @@ export const catalog: Catalog = {
     'Получите обзор этого сканирования простым языком.',
   'ai.unavailableOverview':
     'Сводка ИИ отключена для этого сканирования. Результаты сканирования доступны.',
-  'ai.preparingOverview': 'Готовим обзор этого сканирования.',
+  'ai.waiting.chatStage': 'Ищем ответ',
+  'ai.waiting.chatDetail': 'Это может занять до минуты',
+  'ai.waiting.cancel': 'Отмена',
+  'ai.waiting.queuedStage': 'Ожидание запуска',
+  'ai.waiting.fixesStage': 'Ищем исправления производителя',
+  'ai.waiting.groupsStage': 'Ищем самые простые исправления',
+  'ai.waiting.summaryStage': 'Пишем итог',
+  'ai.waiting.scanDetail':
+    'Обычно от 2 до 4 минут. Можно уйти с этой страницы.',
+  'ai.waiting.groupDetail': ({ n, m }) =>
+    `Читаем группу ${n} из ${m} · обычно от 2 до 4 минут`,
   'ai.completedDescription':
     'Простое объяснение данных, зарегистрированных в этом сканировании.',
   'ai.whatToDoFirst': 'Что исправить в первую очередь',

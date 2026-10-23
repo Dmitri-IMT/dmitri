@@ -7455,6 +7455,24 @@ components:
         status:
           type: string
           enum: [pending, processing]
+        progress:
+          anyOf:
+            - $ref: '#/components/schemas/ScanAIAnalysisProgress'
+            - type: 'null'
+    ScanAIAnalysisProgress:
+      type: object
+      additionalProperties: false
+      required: [stage, done, total]
+      properties:
+        stage:
+          type: string
+          enum: [fixes, groups, summary]
+        done:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
     ScanAIAnalysisFailed:
       type: object
       additionalProperties: false

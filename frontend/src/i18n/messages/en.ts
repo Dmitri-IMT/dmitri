@@ -343,7 +343,16 @@ export const catalog = {
   'ai.notRequestedOverview': 'Get a plain-language overview of this scan.',
   'ai.unavailableOverview':
     'AI summaries are disabled for this scan. The scan results are still available.',
-  'ai.preparingOverview': 'Preparing a plain-language overview of this scan.',
+  'ai.waiting.chatStage': 'Looking for an answer',
+  'ai.waiting.chatDetail': 'This can take up to a minute',
+  'ai.waiting.cancel': 'Cancel',
+  'ai.waiting.queuedStage': 'Waiting to start',
+  'ai.waiting.fixesStage': 'Looking up vendor fixes',
+  'ai.waiting.groupsStage': 'Finding the easiest fixes',
+  'ai.waiting.summaryStage': 'Writing the summary',
+  'ai.waiting.scanDetail': 'Usually 2 to 4 minutes. You can leave this page.',
+  'ai.waiting.groupDetail': ({ n, m }) =>
+    `Reading group ${n} of ${m} · usually 2 to 4 minutes`,
   'ai.completedDescription':
     "A plain-language interpretation of this scan's recorded evidence.",
   'ai.whatToDoFirst': 'What to do first',
