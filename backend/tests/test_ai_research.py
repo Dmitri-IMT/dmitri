@@ -120,6 +120,7 @@ def test_sourced_options_are_saved_and_attached(administrative_session):
     assert [option.source_name for option in finding.fix_options] == [
         "OpenSSH release notes"
     ]
+    assert [source.url for source in finding._fix_sources] == [ADVISORY]
     row = administrative_session.exec(select(AIFixRecord)).one()
     assert row.cve_id == "CVE-2026-0001"
     assert row.has_fix is True

@@ -344,18 +344,50 @@ export const catalog: Catalog = {
   'ai.viewFinding': ({ index }) => 'Ver achado ' + index,
   'ai.genericError':
     'Não foi possível obter uma resposta agora. Tente novamente.',
-  'ai.overview': 'Resumo da IA',
   'ai.overviewDescription':
     'Obtenha um resumo desta varredura em linguagem simples.',
-  'ai.reloadOverview': 'Recarregar resumo',
-  'ai.explainScan': 'Explicar esta varredura',
   'ai.failedOverview':
     'Não foi possível preparar o resumo. Os resultados da varredura continuam disponíveis.',
-  'ai.loadFailed': 'Não foi possível carregar o resumo.',
-  'ai.notRequestedOverview':
-    'Obtenha um resumo desta varredura em linguagem simples.',
-  'ai.unavailableOverview':
-    'O resumo por IA está desativado para esta varredura. Os resultados continuam disponíveis.',
+  'todo.title': 'Sua lista de tarefas',
+  'todo.fallbackTitle': 'Comece por aqui',
+  'todo.fallbackLead': ({ count }) =>
+    `${count === 1 ? 'O problema' : `Os ${count} problemas`} com o maior risco Dmitri.`,
+  'todo.count': ({ tasks, fixed, total }) =>
+    `${tasks} tarefa${tasks === 1 ? '' : 's'} · corrige ${fixed} de ${total} problemas`,
+  'todo.order': 'Primeiro o mais fácil e mais importante.',
+  'todo.fixesProblems': ({ count }) =>
+    `corrige ${count} problema${count === 1 ? '' : 's'}`,
+  'todo.risk': 'Risco',
+  'todo.showSteps': 'Mostrar passos',
+  'todo.hideSteps': 'Ocultar passos',
+  'todo.sources': 'Fonte:',
+  'todo.uncovered': ({ count }) =>
+    `${count} problema${count === 1 ? ' ainda não tem' : 's ainda não têm'} uma correção simples. ${count === 1 ? 'Ele está' : 'Eles estão'} na lista abaixo.`,
+  'todo.footer':
+    'Escrito pela IA do Dmitri a partir desta varredura e de alertas públicos. Confira cada passo antes de agir.',
+  'todo.notRequested':
+    'O Dmitri pode escrever uma lista curta de tarefas para esta varredura, com as correções mais fáceis primeiro.',
+  'todo.makeList': 'Criar minha lista de tarefas',
+  'todo.leavePage':
+    'Você pode sair desta página. A lista estará aqui quando ficar pronta. Enquanto isso, todos os problemas estão na lista abaixo.',
+  'todo.failed':
+    'O Dmitri não conseguiu escrever a lista desta vez. Os resultados da varredura estão seguros e completos.',
+  'todo.loadFailed': 'Não foi possível carregar sua lista de tarefas.',
+  'todo.tryAgain': 'Tentar de novo',
+  'todo.requestFailed':
+    'O Dmitri não conseguiu iniciar a lista de tarefas. Tente de novo.',
+  'todo.nothingToFix': 'Nada a corrigir nesta varredura.',
+  'todo.notProof':
+    'Isso não prova que a rede está segura. O Dmitri só conhece os problemas que consegue verificar. Faça outra varredura depois de adicionar uma máquina.',
+  'todo.who.owner': 'Você',
+  'todo.who.it_person': 'Seu técnico de TI',
+  'todo.who.vendor': 'O fabricante',
+  'todo.time.5_minutes': 'cerca de 5 minutos',
+  'todo.time.30_minutes': 'cerca de 30 minutos',
+  'todo.time.1_hour': 'cerca de 1 hora',
+  'todo.time.half_day': 'cerca de meio dia',
+  'todo.time.1_day': 'cerca de 1 dia',
+  'todo.time.longer': 'mais de um dia',
   'ai.waiting.chatStage': 'Procurando uma resposta',
   'ai.waiting.chatDetail': 'Isso pode levar até um minuto',
   'ai.waiting.cancel': 'Cancelar',
@@ -370,16 +402,6 @@ export const catalog: Catalog = {
   'ai.completedDescription':
     'Interpretação em linguagem simples das evidências registradas nesta varredura.',
   'ai.whatToDoFirst': 'O que fazer primeiro',
-  'ai.whyVulnerabilities': 'Por que estas vulnerabilidades importam',
-  'ai.recordedVulnerability': 'Vulnerabilidade registrada',
-  'ai.recommendedAction': 'Ação recomendada:',
-  'ai.showDetails': 'Mostrar detalhes da avaliação e limitações',
-  'ai.showOverview': 'Mostrar resumo da IA',
-  'ai.cannotConfirm': 'O que esta varredura não pode confirmar',
-  'ai.priorityImmediate': 'Imediata',
-  'ai.priorityHigh': 'Alta prioridade',
-  'ai.priorityMedium': 'Prioridade média',
-  'ai.priorityLow': 'Baixa prioridade',
   'reports.title': 'Relatórios da varredura',
   'reports.description': 'Escolha qual relatório deseja baixar.',
   'reports.preparing': 'Preparando relatório...',

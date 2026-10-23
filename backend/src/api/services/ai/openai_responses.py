@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 OPENAI_PROVIDER_ID = "openai"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-AI_PROMPT_VERSION = "10"
+AI_PROMPT_VERSION = "11"
 
 _INSTRUCTIONS_DIR = Path(__file__).parent / "instructions"
 
@@ -632,16 +632,15 @@ def _writing_guidance(violation_codes: tuple[str, ...]) -> str:
             "and parentheses"
         ),
         "sentence_too_long": "use sentences with no more than 25 words",
-        "too_many": "return no more than three uncertainties",
         "analysis contains an unknown reference": (
             "use only finding_N and machine_N references present in the supplied "
             "context, including in prose"
         ),
         "analysis contains duplicate finding references": (
-            "include no more than one important finding explanation per finding_ref"
+            "include no more than one finding note per finding_ref"
         ),
-        "analysis omits a KEV finding from actions": (
-            "include an action referencing every supplied finding marked is_kev=true"
+        "analysis omits a KEV finding from tasks": (
+            "put every supplied finding marked is_kev=true in the fixes of a task"
         ),
     }
     corrections = {

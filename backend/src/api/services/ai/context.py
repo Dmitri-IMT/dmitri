@@ -21,8 +21,9 @@ from api.models.persistence import (
     ServiceRecord,
 )
 from api.schemas.ai import (
-    AIFindingExplanation,
-    AIRecommendedAction,
+    AIFindingNote,
+    AIFixTask,
+    AISourceLink,
     FixActor,
     FixEffort,
     ProviderScanAIAnalysis,
@@ -114,6 +115,8 @@ class AIFindingContext(BaseModel):
     version: str | None = None
     version_affected: Literal["yes", "no", "unknown"] | None = None
     fix_options: list[AIFixOptionContext] = Field(default_factory=list)
+
+    _fix_sources: list[AISourceLink] = PrivateAttr(default_factory=list)
 
 
 class ScanAIContext(BaseModel):
@@ -377,77 +380,125 @@ def describe_observed_products(
             finding.product, finding.version = observed
 
 
+TASK_TIME_ORDER = ("5_minutes", "30_minutes", "1_hour", "half_day", "1_day", "longer")
+_PRIORITY_ORDER = {"immediate": 0, "high": 1, "medium": 2, "low": 3}
+MAX_TASK_SOURCES = 3
+
+
 def materialize_scan_ai_analysis(
     context: ScanAIContext,
     analysis: ProviderScanAIAnalysis,
 ) -> ScanAIAnalysis:
     known_finding_refs = set(context._finding_ids_by_ref)
     known_refs = known_finding_refs | set(context._display_values_by_ref)
-    if not _uses_only_known_references(
-        analysis, known_finding_refs, known_refs
-    ):
+    if not _uses_only_known_references(analysis, known_finding_refs, known_refs):
         raise ValueError("analysis contains an unknown reference")
 
-    explanations = []
-    for item in analysis.important_findings:
-        explanations.append(
-            AIFindingExplanation(
-                finding_id=context._finding_ids_by_ref[item.finding_ref],
-                why_it_matters=replace_ai_references(
-                    item.why_it_matters, context._display_values_by_ref
-                ),
-                plain_language_explanation=replace_ai_references(
-                    item.plain_language_explanation,
-                    context._display_values_by_ref,
-                ),
-                recommendation=replace_ai_references(
-                    item.recommendation, context._display_values_by_ref
-                ),
-                evidence_used=[
-                    replace_ai_references(value, context._display_values_by_ref)
-                    for value in item.evidence_used
-                ],
-                uncertainty=(
-                    replace_ai_references(
-                        item.uncertainty, context._display_values_by_ref
-                    )
-                    if item.uncertainty is not None
+    display = context._display_values_by_ref
+    findings_by_ref = {finding.finding_ref: finding for finding in context.top_findings}
+
+    def highest_risk(references: list[str]) -> float | None:
+        scores = [
+            findings_by_ref[reference].risk_score
+            for reference in references
+            if findings_by_ref[reference].risk_score is not None
+        ]
+        return max(scores, default=None)
+
+    ordered = sorted(
+        analysis.tasks,
+        key=lambda task: (
+            TASK_TIME_ORDER.index(task.time),
+            -(highest_risk(task.fixes) or -1),
+            -len(task.fixes),
+        ),
+    )
+    tasks = []
+    rank_by_ref: dict[str, int] = {}
+    for rank, task in enumerate(ordered, start=1):
+        for reference in task.fixes:
+            rank_by_ref.setdefault(reference, rank)
+        tasks.append(
+            AIFixTask(
+                rank=rank,
+                priority=priority_for_references(context, task.fixes),
+                title=replace_ai_references(task.title, display),
+                who=task.who,
+                time=task.time,
+                steps=[replace_ai_references(step, display) for step in task.steps],
+                fallback=(
+                    replace_ai_references(task.fallback, display)
+                    if task.fallback is not None
                     else None
                 ),
-            )
-        )
-    actions = []
-    for item in analysis.priority_actions:
-        actions.append(
-            AIRecommendedAction(
-                priority=item.priority,
-                title=replace_ai_references(item.title, context._display_values_by_ref),
-                description=replace_ai_references(
-                    item.description, context._display_values_by_ref
-                ),
-                related_finding_ids=[
-                    context._finding_ids_by_ref[reference]
-                    for reference in item.related_finding_refs
+                fixes_fully=task.fixes_fully,
+                finding_ids=[
+                    context._finding_ids_by_ref[reference] for reference in task.fixes
                 ],
+                highest_risk_score=highest_risk(task.fixes),
+                sources=_task_sources(findings_by_ref, task.fixes),
             )
         )
     return ScanAIAnalysis(
-        executive_summary=replace_ai_references(
-            analysis.executive_summary, context._display_values_by_ref
-        ),
-        overall_assessment=replace_ai_references(
-            analysis.overall_assessment, context._display_values_by_ref
-        ),
-        plain_language_summary=replace_ai_references(
-            analysis.plain_language_summary, context._display_values_by_ref
-        ),
-        priority_actions=actions,
-        important_findings=explanations,
-        uncertainties=[
-            replace_ai_references(value, context._display_values_by_ref)
-            for value in analysis.uncertainties
+        summary=replace_ai_references(analysis.summary, display),
+        tasks=tasks,
+        findings=[
+            AIFindingNote(
+                finding_id=context._finding_ids_by_ref[note.finding_ref],
+                plain_title=replace_ai_references(note.plain_title, display),
+                cause=replace_ai_references(note.cause, display),
+                what_could_happen=replace_ai_references(
+                    note.what_could_happen, display
+                ),
+                task_rank=rank_by_ref.get(note.finding_ref),
+            )
+            for note in analysis.findings
         ],
+        not_checked=(
+            replace_ai_references(analysis.not_checked, display)
+            if analysis.not_checked is not None
+            else None
+        ),
     )
+
+
+def priority_for_references(context: ScanAIContext, references: list[str]) -> str:
+    findings_by_reference = {
+        finding.finding_ref: finding for finding in context.top_findings
+    }
+    priorities = [
+        _priority_for_finding(findings_by_reference[reference])
+        for reference in references
+        if reference in findings_by_reference
+    ]
+    return min(priorities, key=_PRIORITY_ORDER.__getitem__, default="low")
+
+
+def _priority_for_finding(finding: AIFindingContext) -> str:
+    if finding.is_kev:
+        return "immediate"
+    if (
+        (finding.risk_score is not None and finding.risk_score >= 70)
+        or (finding.cvss_score is not None and finding.cvss_score >= 9)
+        or (finding.epss_score is not None and finding.epss_score >= 0.7)
+    ):
+        return "high"
+    if (finding.risk_score is not None and finding.risk_score >= 40) or (
+        finding.cvss_score is not None and finding.cvss_score >= 7
+    ):
+        return "medium"
+    return "low"
+
+
+def _task_sources(
+    findings_by_ref: dict[str, AIFindingContext], references: list[str]
+) -> list[AISourceLink]:
+    sources: dict[str, AISourceLink] = {}
+    for reference in references:
+        candidates = findings_by_ref[reference]._fix_sources
+        if candidates and candidates[0].url not in sources:
+            sources[candidates[0].url] = candidates[0]
+    return list(sources.values())[:MAX_TASK_SOURCES]
 
 
 def assign_machine_ref(
@@ -465,15 +516,12 @@ def _uses_only_known_references(
     known_finding_refs: set[str],
     known_refs: set[str],
 ) -> bool:
-    if any(
-        item.finding_ref not in known_finding_refs
-        for item in analysis.important_findings
-    ):
+    if any(note.finding_ref not in known_finding_refs for note in analysis.findings):
         return False
     if any(
         reference not in known_finding_refs
-        for action in analysis.priority_actions
-        for reference in action.related_finding_refs
+        for task in analysis.tasks
+        for reference in task.fixes
     ):
         return False
     return all(
@@ -484,25 +532,15 @@ def _uses_only_known_references(
 
 
 def _text_values(analysis: ProviderScanAIAnalysis) -> list[str]:
-    values = [
-        analysis.executive_summary,
-        analysis.overall_assessment,
-        analysis.plain_language_summary,
-        *analysis.uncertainties,
-    ]
-    for action in analysis.priority_actions:
-        values.extend([action.title, action.description])
-    for explanation in analysis.important_findings:
-        values.extend(
-            [
-                explanation.why_it_matters,
-                explanation.plain_language_explanation,
-                explanation.recommendation,
-                *explanation.evidence_used,
-            ]
-        )
-        if explanation.uncertainty is not None:
-            values.append(explanation.uncertainty)
+    values = [analysis.summary]
+    if analysis.not_checked is not None:
+        values.append(analysis.not_checked)
+    for task in analysis.tasks:
+        values.extend([task.title, *task.steps])
+        if task.fallback is not None:
+            values.append(task.fallback)
+    for note in analysis.findings:
+        values.extend([note.plain_title, note.cause, note.what_could_happen])
     return values
 
 

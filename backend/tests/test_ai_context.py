@@ -1,15 +1,12 @@
 import pytest
+from ai_shapes import provider_analysis, provider_note, provider_task
 from api.models.persistence import (
     AIScanAnalysisRecord,
     EpssRecord,
     KevRecord,
     RiskSnapshotRecord,
 )
-from api.schemas.ai import (
-    AIProviderFindingExplanation,
-    AIProviderRecommendedAction,
-    ProviderScanAIAnalysis,
-)
+from api.schemas.ai import AISourceLink
 from api.services.ai.analyzer import split_context
 from api.services.ai.context import (
     ScanAINotReadyError,
@@ -263,38 +260,66 @@ def test_materialize_analysis_replaces_local_references(administrative_session):
 
     analysis = materialize_scan_ai_analysis(
         context,
-        ProviderScanAIAnalysis(
-            executive_summary="finding_1 needs attention.",
-            overall_assessment="machine_1 has one recorded vulnerability.",
-            plain_language_summary="Review finding_1 with the machine owner.",
-            priority_actions=[
-                AIProviderRecommendedAction(
-                    priority="high",
-                    title="Review finding_1",
-                    description="Ask the owner of machine_1 to review it.",
-                    related_finding_refs=["finding_1"],
+        provider_analysis(
+            summary="finding_1 needs attention on machine_1.",
+            tasks=[
+                provider_task(
+                    "finding_1",
+                    title="Update finding_1",
+                    steps=("Ask the owner of machine_1 to update it.",),
                 )
             ],
-            important_findings=[
-                AIProviderFindingExplanation(
-                    finding_ref="finding_1",
-                    why_it_matters="finding_1 is exposed.",
-                    plain_language_explanation="machine_1 needs a review.",
-                    recommendation="Review finding_1.",
-                    evidence_used=["The scan recorded finding_1."],
-                    uncertainty=None,
-                )
-            ],
-            uncertainties=[],
+            findings=[provider_note("finding_1")],
         ),
     )
 
-    assert analysis.important_findings[0].finding_id == seeded["finding"].finding_id
-    assert analysis.priority_actions[0].related_finding_ids == [
-        seeded["finding"].finding_id
-    ]
+    assert analysis.findings[0].finding_id == seeded["finding"].finding_id
+    assert analysis.findings[0].task_rank == 1
+    assert analysis.tasks[0].finding_ids == [seeded["finding"].finding_id]
+    assert analysis.tasks[0].rank == 1
     assert "finding_1" not in analysis.model_dump_json()
     assert "machine_1" not in analysis.model_dump_json()
+
+
+def test_materialize_orders_tasks_by_time_then_risk_and_ranks_findings(
+    administrative_session,
+):
+    seeded = seed_read_graph(administrative_session)
+    context = build_scan_ai_context(administrative_session, seeded["scan"])
+    context.top_findings[0].risk_score = 40
+    second = context.top_findings[0].model_copy(
+        update={"finding_ref": "finding_2", "risk_score": 90}
+    )
+    context.top_findings.append(second)
+    context._finding_ids_by_ref["finding_2"] = seeded["other_finding"].finding_id
+    context.top_findings[0]._fix_sources = [
+        AISourceLink(name="Vendor advisory", url="https://vendor.example.com/a")
+    ]
+
+    analysis = materialize_scan_ai_analysis(
+        context,
+        provider_analysis(
+            tasks=[
+                provider_task(
+                    "finding_2", title="Replace the old router", time="1_day"
+                ),
+                provider_task("finding_1", title="Turn off remote login"),
+                provider_task("finding_2", title="Update the router"),
+            ],
+            findings=[provider_note("finding_1"), provider_note("finding_2")],
+        ),
+    )
+
+    assert [task.title for task in analysis.tasks] == [
+        "Update the router",
+        "Turn off remote login",
+        "Replace the old router",
+    ]
+    assert [task.highest_risk_score for task in analysis.tasks] == [90, 40, 90]
+    assert analysis.tasks[1].sources == [
+        AISourceLink(name="Vendor advisory", url="https://vendor.example.com/a")
+    ]
+    assert [note.task_rank for note in analysis.findings] == [2, 1]
 
 
 def test_materialize_analysis_rejects_unknown_reference(administrative_session):
@@ -302,13 +327,8 @@ def test_materialize_analysis_rejects_unknown_reference(administrative_session):
     context = build_scan_ai_context(administrative_session, seeded["scan"])
     assert context is not None
 
-    analysis = ProviderScanAIAnalysis(
-        executive_summary="finding_99 needs attention.",
-        overall_assessment="The scan recorded a vulnerability.",
-        plain_language_summary="Review the recorded vulnerability.",
-        priority_actions=[],
-        important_findings=[],
-        uncertainties=[],
+    analysis = provider_analysis(
+        summary="finding_99 needs attention.", tasks=[], findings=[]
     )
 
     with pytest.raises(ValueError, match="unknown reference"):

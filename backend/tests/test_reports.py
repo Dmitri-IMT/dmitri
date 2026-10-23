@@ -4,10 +4,9 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
+from ai_shapes import stored_analysis
 from api.models.persistence import RiskSnapshotRecord
 from api.schemas.ai import (
-    AIFindingExplanation,
-    ScanAIAnalysis,
     ScanAIAnalysisCompleted,
 )
 from api.services.report_education_copy import REPORT_COPY
@@ -100,23 +99,7 @@ def test_explained_report_uses_ai_recommendation_for_finding(
         updated_at=now,
         completed_at=now,
         status="completed",
-        analysis=ScanAIAnalysis(
-            executive_summary="A clear executive summary.",
-            overall_assessment="A clear overall assessment.",
-            plain_language_summary="A clear plain language summary.",
-            priority_actions=[],
-            important_findings=[
-                AIFindingExplanation(
-                    finding_id=seeded["finding"].finding_id,
-                    why_it_matters="This setting may expose the device.",
-                    plain_language_explanation="The service uses a weak setting.",
-                    recommendation="Replace it with a modern, supported setting.",
-                    evidence_used=["Observed service banner."],
-                    uncertainty=None,
-                )
-            ],
-            uncertainties=[],
-        ),
+        analysis=stored_analysis(seeded["finding"].finding_id),
     )
     monkeypatch.setattr(
         "api.services.reports.get_scan_ai_analysis",
@@ -135,7 +118,10 @@ def test_explained_report_uses_ai_recommendation_for_finding(
         for item in findings
         if item["title"] == seeded["finding"].title
     )
-    assert finding["recommendation"] == "Replace it with a modern, supported setting."
+    assert finding["recommendation"] == "Install the latest update from the vendor."
+    assert finding["plain_language_explanation"] == (
+        "The machine runs old software with a known flaw."
+    )
 
 
 def test_explained_report_register_includes_all_findings_regardless_of_rank(

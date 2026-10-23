@@ -333,16 +333,48 @@ export const catalog = {
   'ai.askAboutScan': 'Ask about this scan',
   'ai.viewFinding': ({ index }) => 'View finding ' + index,
   'ai.genericError': 'Unable to get an answer right now. Try again.',
-  'ai.overview': 'AI overview',
   'ai.overviewDescription': 'Get a plain-language overview of this scan.',
-  'ai.reloadOverview': 'Reload overview',
-  'ai.explainScan': 'Explain this scan',
   'ai.failedOverview':
     "Couldn't prepare the overview. The scan results are complete without it.",
-  'ai.loadFailed': "Couldn't load the overview.",
-  'ai.notRequestedOverview': 'Get a plain-language overview of this scan.',
-  'ai.unavailableOverview':
-    'AI summaries are disabled for this scan. The scan results are still available.',
+  'todo.title': 'Your to-do list',
+  'todo.fallbackTitle': 'Start here',
+  'todo.fallbackLead': ({ count }) =>
+    `The ${count} problem${count === 1 ? '' : 's'} with the highest Dmitri risk.`,
+  'todo.count': ({ tasks, fixed, total }) =>
+    `${tasks} task${tasks === 1 ? '' : 's'} · fixes ${fixed} of ${total} problems`,
+  'todo.order': 'Easiest and most important first.',
+  'todo.fixesProblems': ({ count }) =>
+    `fixes ${count} problem${count === 1 ? '' : 's'}`,
+  'todo.risk': 'Risk',
+  'todo.showSteps': 'Show steps',
+  'todo.hideSteps': 'Hide steps',
+  'todo.sources': 'From:',
+  'todo.uncovered': ({ count }) =>
+    `${count} problem${count === 1 ? ' has' : 's have'} no simple fix yet. ${count === 1 ? 'It is' : 'They are'} in the list below.`,
+  'todo.footer':
+    'Written by Dmitri AI from this scan and public advisories. Check each step before you act.',
+  'todo.notRequested':
+    'Dmitri can write a short to-do list for this scan, with the easiest fixes first.',
+  'todo.makeList': 'Make my to-do list',
+  'todo.leavePage':
+    'You can leave this page. The list will be here when it is ready. Meanwhile, all problems are in the list below.',
+  'todo.failed':
+    'Dmitri could not write the list this time. Your scan results are safe and complete.',
+  'todo.loadFailed': "Couldn't load your to-do list.",
+  'todo.tryAgain': 'Try again',
+  'todo.requestFailed': 'Dmitri could not start the to-do list. Try again.',
+  'todo.nothingToFix': 'Nothing to fix from this scan.',
+  'todo.notProof':
+    'This does not prove the network is safe. Dmitri only knows about the problems it can check. Scan again after you add a machine.',
+  'todo.who.owner': 'You',
+  'todo.who.it_person': 'Your IT person',
+  'todo.who.vendor': 'The vendor',
+  'todo.time.5_minutes': 'about 5 minutes',
+  'todo.time.30_minutes': 'about 30 minutes',
+  'todo.time.1_hour': 'about 1 hour',
+  'todo.time.half_day': 'about half a day',
+  'todo.time.1_day': 'about 1 day',
+  'todo.time.longer': 'more than a day',
   'ai.waiting.chatStage': 'Looking for an answer',
   'ai.waiting.chatDetail': 'This can take up to a minute',
   'ai.waiting.cancel': 'Cancel',
@@ -356,16 +388,6 @@ export const catalog = {
   'ai.completedDescription':
     "A plain-language interpretation of this scan's recorded evidence.",
   'ai.whatToDoFirst': 'What to do first',
-  'ai.whyVulnerabilities': 'Why these vulnerabilities matter',
-  'ai.recordedVulnerability': 'Recorded vulnerability',
-  'ai.recommendedAction': 'Recommended action:',
-  'ai.showDetails': 'Show assessment details and limitations',
-  'ai.showOverview': 'Show AI summary',
-  'ai.cannotConfirm': 'What this scan cannot confirm',
-  'ai.priorityImmediate': 'Immediate',
-  'ai.priorityHigh': 'High priority',
-  'ai.priorityMedium': 'Medium priority',
-  'ai.priorityLow': 'Low priority',
   'reports.title': 'Scan reports',
   'reports.description': 'Choose which report you want to download.',
   'reports.preparing': 'Preparing report...',

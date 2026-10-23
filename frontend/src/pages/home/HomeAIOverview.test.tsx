@@ -22,19 +22,24 @@ const completedAnalysis = {
   updated_at: '2026-09-12T12:00:00Z',
   completed_at: '2026-09-12T12:01:00Z',
   analysis: {
-    executive_summary: 'A rede precisa de atenção.',
-    plain_language_summary: 'Há uma atualização importante para fazer.',
-    overall_assessment: 'A varredura encontrou riscos conhecidos.',
-    priority_actions: [
+    summary: 'A rede precisa de atenção.',
+    tasks: [
       {
+        rank: 1,
         priority: 'high' as const,
         title: 'Atualizar o equipamento',
-        description: 'Instale as atualizações recomendadas.',
-        related_finding_ids: [],
+        who: 'it_person' as const,
+        time: '30_minutes' as const,
+        steps: ['Instale as atualizações recomendadas.'],
+        fallback: null,
+        fixes_fully: true,
+        finding_ids: ['44444444-4444-4444-8444-444444444444'],
+        highest_risk_score: 80,
+        sources: [],
       },
     ],
-    important_findings: [],
-    uncertainties: [],
+    findings: [],
+    not_checked: null,
   },
 } satisfies components['schemas']['ScanAIAnalysisCompleted']
 
@@ -50,6 +55,9 @@ describe('HomeAIOverview', () => {
 
     expect(await screen.findByTestId('home-ai-overview')).toHaveTextContent(
       'A rede precisa de atenção.',
+    )
+    expect(screen.getByTestId('home-ai-overview')).toHaveTextContent(
+      'Atualizar o equipamentoYour IT person · about 30 minutes',
     )
     expect(screen.getByRole('link')).toHaveAttribute(
       'href',

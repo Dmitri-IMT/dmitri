@@ -5,7 +5,7 @@ from collections.abc import Iterable
 
 from api.schemas.ai import ProviderScanAIAnalysis, ProviderScanAIChildAnalysis
 
-WRITING_SKILL_VERSION = "2"
+WRITING_SKILL_VERSION = "3"
 
 _URL_PATTERN = re.compile(r"(?:https?://|www\.)\S+", re.IGNORECASE)
 _HTML_PATTERN = re.compile(r"<[/!]?[a-z][^>]*>", re.IGNORECASE)
@@ -101,14 +101,10 @@ def _lint_prose(
     analysis: ProviderScanAIAnalysis | ProviderScanAIChildAnalysis,
 ) -> None:
     violations: list[str] = []
-    prose = list(_prose_fields(analysis))
-    for field, value, limit in prose:
+    for field, value, limit in _prose_fields(analysis):
         if len(value) > limit:
             violations.append(f"{field}:too_long")
         violations.extend(_text_violations(field, value))
-
-    if len(analysis.uncertainties) > 3:
-        violations.append("uncertainties:too_many")
     if violations:
         raise WritingStyleViolation(violations)
 
@@ -118,60 +114,25 @@ def _prose_fields(
 ) -> list[tuple[str, str, int]]:
     values: list[tuple[str, str, int]] = []
     if isinstance(analysis, ProviderScanAIAnalysis):
+        values.append(("summary", analysis.summary, 280))
+        if analysis.not_checked is not None:
+            values.append(("not_checked", analysis.not_checked, 200))
+    for index, task in enumerate(analysis.tasks):
+        values.append((f"tasks[{index}].title", task.title, 60))
+        values.extend(
+            (f"tasks[{index}].steps[{step_index}]", step, 160)
+            for step_index, step in enumerate(task.steps)
+        )
+        if task.fallback is not None:
+            values.append((f"tasks[{index}].fallback", task.fallback, 160))
+    for index, note in enumerate(analysis.findings):
         values.extend(
             [
-                ("executive_summary", analysis.executive_summary, 280),
-                ("overall_assessment", analysis.overall_assessment, 280),
-                ("plain_language_summary", analysis.plain_language_summary, 280),
+                (f"findings[{index}].plain_title", note.plain_title, 90),
+                (f"findings[{index}].cause", note.cause, 160),
+                (f"findings[{index}].what_could_happen", note.what_could_happen, 160),
             ]
         )
-    for index, action in enumerate(analysis.priority_actions):
-        values.extend(
-            [
-                (f"priority_actions[{index}].title", action.title, 60),
-                (f"priority_actions[{index}].description", action.description, 220),
-            ]
-        )
-    for index, explanation in enumerate(analysis.important_findings):
-        values.extend(
-            [
-                (
-                    f"important_findings[{index}].why_it_matters",
-                    explanation.why_it_matters,
-                    180,
-                ),
-                (
-                    f"important_findings[{index}].plain_language_explanation",
-                    explanation.plain_language_explanation,
-                    180,
-                ),
-                (
-                    f"important_findings[{index}].recommendation",
-                    explanation.recommendation,
-                    180,
-                ),
-            ]
-        )
-        values.extend(
-            (
-                f"important_findings[{index}].evidence_used[{evidence_index}]",
-                evidence,
-                180,
-            )
-            for evidence_index, evidence in enumerate(explanation.evidence_used)
-        )
-        if explanation.uncertainty is not None:
-            values.append(
-                (
-                    f"important_findings[{index}].uncertainty",
-                    explanation.uncertainty,
-                    160,
-                )
-            )
-    values.extend(
-        (f"uncertainties[{index}]", uncertainty, 160)
-        for index, uncertainty in enumerate(analysis.uncertainties)
-    )
     return values
 
 

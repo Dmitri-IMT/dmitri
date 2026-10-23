@@ -6420,15 +6420,38 @@ components:
           maxItems: 10
           items:
             $ref: '#/components/schemas/FindingRecord'
-    AIRecommendedAction:
+    AISourceLink:
+      type: object
+      additionalProperties: false
+      required: [name, url]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 200
+        url:
+          type: string
+          minLength: 8
+          maxLength: 2000
+    AIFixTask:
       type: object
       additionalProperties: false
       required:
+        - rank
         - priority
         - title
-        - description
-        - related_finding_ids
+        - who
+        - time
+        - steps
+        - fallback
+        - fixes_fully
+        - finding_ids
+        - highest_risk_score
+        - sources
       properties:
+        rank:
+          type: integer
+          minimum: 1
         priority:
           type: string
           enum: [immediate, high, medium, low]
@@ -6436,93 +6459,95 @@ components:
           type: string
           minLength: 3
           maxLength: 200
-        description:
+        who:
           type: string
-          minLength: 3
-          maxLength: 2000
-        related_finding_ids:
+          enum: [owner, it_person, vendor]
+        time:
+          type: string
+          enum: [5_minutes, 30_minutes, 1_hour, half_day, 1_day, longer]
+        steps:
           type: array
+          minItems: 1
+          maxItems: 3
+          items:
+            type: string
+            minLength: 3
+            maxLength: 600
+        fallback:
+          type: [string, 'null']
+          maxLength: 600
+        fixes_fully:
+          type: boolean
+        finding_ids:
+          type: array
+          minItems: 1
           maxItems: 15
           items:
             type: string
             format: uuid
-    AIFindingExplanation:
+        highest_risk_score:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 100
+        sources:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/AISourceLink'
+    AIFindingNote:
       type: object
       additionalProperties: false
       required:
         - finding_id
-        - why_it_matters
-        - plain_language_explanation
-        - recommendation
-        - evidence_used
-        - uncertainty
+        - plain_title
+        - cause
+        - what_could_happen
+        - task_rank
       properties:
         finding_id:
           type: string
           format: uuid
-        why_it_matters:
+        plain_title:
           type: string
           minLength: 3
-          maxLength: 2000
-        plain_language_explanation:
+          maxLength: 400
+        cause:
           type: string
           minLength: 3
-          maxLength: 2000
-        recommendation:
+          maxLength: 600
+        what_could_happen:
           type: string
           minLength: 3
-          maxLength: 2000
-        evidence_used:
-          type: array
-          maxItems: 10
-          items:
-            type: string
-            minLength: 3
-            maxLength: 2000
-        uncertainty:
-          type: [string, 'null']
-          minLength: 3
-          maxLength: 1000
+          maxLength: 600
+        task_rank:
+          type: [integer, 'null']
+          minimum: 1
     ScanAIAnalysis:
       type: object
       additionalProperties: false
       required:
-        - executive_summary
-        - overall_assessment
-        - plain_language_summary
-        - priority_actions
-        - important_findings
-        - uncertainties
+        - summary
+        - tasks
+        - findings
+        - not_checked
       properties:
-        executive_summary:
+        summary:
           type: string
           minLength: 3
           maxLength: 4000
-        overall_assessment:
-          type: string
-          minLength: 3
-          maxLength: 4000
-        plain_language_summary:
-          type: string
-          minLength: 3
-          maxLength: 4000
-        priority_actions:
+        tasks:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/AIFixTask'
+        findings:
           type: array
           maxItems: 15
           items:
-            $ref: '#/components/schemas/AIRecommendedAction'
-        important_findings:
-          type: array
-          maxItems: 15
-          items:
-            $ref: '#/components/schemas/AIFindingExplanation'
-        uncertainties:
-          type: array
-          maxItems: 20
-          items:
-            type: string
-            minLength: 3
-            maxLength: 2000
+            $ref: '#/components/schemas/AIFindingNote'
+        not_checked:
+          type: [string, 'null']
+          maxLength: 600
     ScanAIAnalysisResponse:
       oneOf:
         - $ref: '#/components/schemas/ScanAIAnalysisUnavailable'

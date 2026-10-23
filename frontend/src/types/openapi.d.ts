@@ -2141,29 +2141,39 @@ export interface components {
             severity: components["schemas"]["SeverityBreakdown"];
             top_findings: components["schemas"]["FindingRecord"][];
         };
-        AIRecommendedAction: {
+        AISourceLink: {
+            name: string;
+            url: string;
+        };
+        AIFixTask: {
+            rank: number;
             /** @enum {string} */
             priority: "immediate" | "high" | "medium" | "low";
             title: string;
-            description: string;
-            related_finding_ids: string[];
+            /** @enum {string} */
+            who: "owner" | "it_person" | "vendor";
+            /** @enum {string} */
+            time: "5_minutes" | "30_minutes" | "1_hour" | "half_day" | "1_day" | "longer";
+            steps: string[];
+            fallback: string | null;
+            fixes_fully: boolean;
+            finding_ids: string[];
+            highest_risk_score: number | null;
+            sources: components["schemas"]["AISourceLink"][];
         };
-        AIFindingExplanation: {
+        AIFindingNote: {
             /** Format: uuid */
             finding_id: string;
-            why_it_matters: string;
-            plain_language_explanation: string;
-            recommendation: string;
-            evidence_used: string[];
-            uncertainty: string | null;
+            plain_title: string;
+            cause: string;
+            what_could_happen: string;
+            task_rank: number | null;
         };
         ScanAIAnalysis: {
-            executive_summary: string;
-            overall_assessment: string;
-            plain_language_summary: string;
-            priority_actions: components["schemas"]["AIRecommendedAction"][];
-            important_findings: components["schemas"]["AIFindingExplanation"][];
-            uncertainties: string[];
+            summary: string;
+            tasks: components["schemas"]["AIFixTask"][];
+            findings: components["schemas"]["AIFindingNote"][];
+            not_checked: string | null;
         };
         ScanAIAnalysisResponse: components["schemas"]["ScanAIAnalysisUnavailable"] | components["schemas"]["ScanAIAnalysisNotRequested"] | components["schemas"]["ScanAIAnalysisQueued"] | components["schemas"]["ScanAIAnalysisFailed"] | components["schemas"]["ScanAIAnalysisCompleted"];
         /** @enum {string} */

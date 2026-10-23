@@ -17,7 +17,7 @@ import FindingEvidenceFilter, {
   type EvidenceFilter,
 } from '@/pages/scans/FindingEvidenceFilter'
 import { ObservationList } from '@/pages/scans/FindingPanel'
-import ScanAIAnalysis from '@/pages/scans/ScanAIAnalysis'
+import TodoList from '@/pages/scans/TodoList'
 import ScanCoverage from '@/pages/scans/ScanCoverage'
 import ScanDelete from '@/pages/scans/ScanDelete'
 import ScanDetailHeader, {
@@ -138,11 +138,7 @@ function ScanDetail() {
                   </p>
                 )}
                 {view.sections.aiAnalysis && (
-                  <ScanAIAnalysis
-                    scanId={scan.scan_id}
-                    findings={scan.findings}
-                    completeness={view.completeness}
-                  />
+                  <TodoList scanId={scan.scan_id} findings={scan.findings} />
                 )}
                 {view.sections.noFindings && (
                   <p data-testid="scan-no-findings" className="text-body-md">

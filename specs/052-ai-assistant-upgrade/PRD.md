@@ -288,7 +288,18 @@ six places. Each place answers one question the user has:
    - Product, version and service come from the port CPE only, for analysis, research and
      chat. Raw banners are no longer sent, because a banner can hold a hostname.
    - `uncertainties` stays in the API for old messages; new answers return `[]`.
-6. R6 entry point — separate issue.
+6. R6 entry point — built as the full DESIGN 052 §14 / 053 §1.2 redesign (owner decision
+   2026-10-23), in phases A–E:
+   - **A, built 2026-10-23:** `FindingRead` gains `risk_breakdown` (from `risk_parts()`,
+     one formula), `epss_score`, `kev_listed`, `known_ransomware`, `product`, `version`.
+   - **B, built 2026-10-23:** the analysis output is now fix tasks (`title`, `who`, `time`,
+     1–3 `steps`, `fallback`, `fixes_fully`, `fixes`), one `summary`, per-finding notes
+     (`plain_title`, `cause`, `what_could_happen`) and `not_checked`. Code orders the tasks
+     (time, then highest risk, then problems fixed), ranks each finding and attaches the R3
+     fix-record sources. Analyses stored before `AI_PROMPT_VERSION` 11 read as
+     `not_requested` and can be made again. The scan overview card is now the to-do list
+     card (DESIGN §15, all states); reports and the Home overview read the new shape.
+   - **C–E:** not built yet (explanation tasks, shared frontend parts, both pages).
 
 ## Success check
 

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from threading import Barrier
 
 import pytest
+from ai_shapes import stored_analysis
 from api.core.config import get_settings
 from api.main import app
 from api.models.persistence import AIScanAnalysisRecord
@@ -20,14 +21,7 @@ from sqlmodel import func, select
 
 
 def _analysis() -> ScanAIAnalysis:
-    return ScanAIAnalysis(
-        executive_summary="One issue needs attention.",
-        overall_assessment="The scan has a limited but important risk.",
-        plain_language_summary="One network service should be reviewed.",
-        priority_actions=[],
-        important_findings=[],
-        uncertainties=[],
-    )
+    return stored_analysis()
 
 
 @pytest.fixture
@@ -163,7 +157,7 @@ def test_analysis_request_conflicts_after_processing_or_completion(
             analysis.model_dump(mode="json") if status == "completed" else None
         ),
         context_version="1",
-        prompt_version="1",
+        prompt_version=AI_PROMPT_VERSION,
         completed_at=datetime.now(timezone.utc) if status == "completed" else None,
     )
     administrative_session.add(record)
@@ -231,7 +225,7 @@ def test_analysis_request_retries_failed_job(
         model="fake-v1",
         status="failed",
         context_version="1",
-        prompt_version="1",
+        prompt_version=AI_PROMPT_VERSION,
         attempts=2,
         last_error="provider_timeout",
         started_at=datetime.now(timezone.utc),
@@ -255,6 +249,38 @@ def test_analysis_request_retries_failed_job(
     assert record.writing_skill_version == WRITING_SKILL_VERSION
     assert record.started_at is None
     assert record.completed_at is None
+
+
+def test_old_shape_analysis_reads_as_not_requested_and_can_be_made_again(
+    client,
+    administrative_session,
+    bearer_headers,
+    enable_ai,
+):
+    seeded = seed_read_graph(administrative_session)
+    record = AIScanAnalysisRecord(
+        scan_id=seeded["scan"].scan_id,
+        provider="groq",
+        model="openai/gpt-oss-120b",
+        status="completed",
+        context_version="4",
+        prompt_version="7",
+        analysis_json={"executive_summary": "Old shape."},
+        completed_at=datetime.now(timezone.utc),
+    )
+    administrative_session.add(record)
+    administrative_session.commit()
+    url = f"/api/v1/scans/{seeded['scan'].scan_id}/analysis"
+    headers = bearer_headers(seeded["org"].id, "viewer")
+
+    assert client.get(url, headers=headers).json()["status"] == "not_requested"
+    response = client.post(url, headers=headers)
+
+    assert response.status_code == 202
+    administrative_session.refresh(record)
+    assert record.status == "pending"
+    assert record.analysis_json is None
+    assert record.prompt_version == AI_PROMPT_VERSION
 
 
 def test_analysis_request_hides_foreign_scan(
@@ -327,7 +353,7 @@ def test_analysis_read_returns_persisted_non_completed_status(
         model="fake-v1",
         status=status,
         context_version="1",
-        prompt_version="1",
+        prompt_version=AI_PROMPT_VERSION,
         completed_at=datetime.now(timezone.utc) if status == "failed" else None,
     )
     administrative_session.add(record)
@@ -364,7 +390,7 @@ def test_analysis_read_returns_validated_completed_payload(
         status="completed",
         analysis_json=analysis.model_dump(mode="json"),
         context_version="1",
-        prompt_version="1",
+        prompt_version=AI_PROMPT_VERSION,
         completed_at=completed_at,
     )
     administrative_session.add(record)
@@ -450,7 +476,7 @@ def test_ai_analysis_storage_rejects_completed_record_without_payload(
             model="fake-v1",
             status="completed",
             context_version="1",
-            prompt_version="1",
+            prompt_version=AI_PROMPT_VERSION,
         )
     )
 

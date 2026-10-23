@@ -182,10 +182,8 @@ def _validate_references(
     analysis: ProviderScanAIAnalysis | ProviderScanAIChildAnalysis,
 ) -> None:
     allowed = {finding.finding_ref for finding in context.top_findings}
-    explained = [item.finding_ref for item in analysis.important_findings]
-    referenced = set(explained).union(
-        *(action.related_finding_refs for action in analysis.priority_actions)
-    )
+    explained = [item.finding_ref for item in analysis.findings]
+    referenced = set(explained).union(*(task.fixes for task in analysis.tasks))
     if not referenced <= allowed:
         raise AIAnalysisValidationError("analysis contains an unknown reference")
     if len(explained) != len(set(explained)):

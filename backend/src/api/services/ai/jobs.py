@@ -44,6 +44,7 @@ from api.services.ai.providers import supports_fix_research
 from api.services.ai.research import attach_fix_records
 from api.services.ai.telemetry import drain_provider_usage, persist_usage_events
 from api.services.ai.validation import (
+    KEV_TASK_ERROR,
     AIAnalysisValidationError,
     sanitize_scan_ai_analysis,
 )
@@ -55,6 +56,7 @@ from api.services.jobs import claim_jobs, retry_or_fail
 
 logger = logging.getLogger(__name__)
 ACTIVE_ENRICHMENT_STATUSES = ("pending", "running")
+FIX_TASK_SHAPE_SINCE = 11
 
 
 class AIAnalysisAlreadyRequestedError(ValueError):
@@ -126,10 +128,19 @@ def get_scan_ai_analysis(
             AIScanAnalysisRecord.language == language,
         )
     ).first()
-    if record is None:
+    if record is None or _has_old_shape(record):
         return ScanAIAnalysisNotRequested(scan_id=scan_id, status="not_requested")
 
     return scan_ai_analysis_response(record)
+
+
+def _has_old_shape(record: AIScanAnalysisRecord) -> bool:
+    if record.status != "completed":
+        return False
+    return not (
+        record.prompt_version.isdigit()
+        and int(record.prompt_version) >= FIX_TASK_SHAPE_SINCE
+    )
 
 
 def request_scan_ai_analysis(
@@ -163,7 +174,7 @@ def request_scan_ai_analysis(
     ).first()
     current_time = now or datetime.now(timezone.utc)
     if record is not None:
-        if record.status != "failed":
+        if record.status != "failed" and not _has_old_shape(record):
             raise AIAnalysisAlreadyRequestedError
         record.status = "pending"
         record.attempts = 0
@@ -408,7 +419,7 @@ def _process_claimed_analysis(
     except ValueError as exc:
         if isinstance(exc, AIAnalysisValidationError):
             code = {
-                "analysis omits a KEV finding from actions": "missing_kev_action",
+                KEV_TASK_ERROR: "missing_kev_task",
                 "analysis contains an unknown reference": "unknown_reference",
                 "analysis contains duplicate finding references": (
                     "duplicate_finding_reference"

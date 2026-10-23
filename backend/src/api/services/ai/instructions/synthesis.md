@@ -1,55 +1,65 @@
-# Task: combine group results into one scan result
+# Task: combine group results into one to-do list
 
 ## Role
 
-Earlier steps explained the scan's vulnerabilities in small groups and checked each result.
-You combine them into the one result the owner reads.
+Earlier steps wrote tasks and notes for the scan's vulnerabilities in small groups and
+checked each result. You combine them into the one to-do list the owner reads.
 
 ## Goal
 
-The owner reads the result and knows which fix to do first, who does it, and what the
-results mean for the business. Done when every ref in kev_finding_refs is in at least one
-action, there are at most five actions, at most three vulnerabilities are explained, and
-every failed_finding_ref is named as a limit.
+The owner reads the result and knows which task to do, who does it and how long it takes.
+Done when every ref in kev_finding_refs is in the fixes of a task, there are at most six
+tasks, and every failed_finding_ref is named in not_checked.
 
 ## Inputs
 
 SYNTHESIS_CONTEXT_JSON in the user message:
 
 - aggregate: totals and coverage for the whole scan.
-- validated_child_results: the checked group results, with their actions and
-  explanations.
-- failed_finding_refs: vulnerabilities whose group could not be explained.
-- kev_finding_refs: known exploited vulnerabilities that every result must cover.
+- validated_child_results: the checked group results, with their tasks and notes.
+- failed_finding_refs: vulnerabilities whose group could not be written.
+- kev_finding_refs: known exploited vulnerabilities that the list must cover.
 
-A coverage limit line may come first. It is true and must be reflected in
-overall_assessment.
+A coverage limit line may come first. It is true and must be reflected in not_checked.
 
 ## Steps
 
-1. Merge actions that do the same fix into one action, and keep every related
-   finding_ref.
-2. Order actions: known exploited first, then reachable from outside the network, then
-   by priority.
-3. Keep the three explanations that matter most for the first actions.
-4. Write the three summaries last, from the actions and explanations.
+1. Merge tasks that do the same fix into one task, and keep every finding_ref in fixes.
+2. Keep at most six tasks. Merge before you drop, and never drop a known exploited
+   vulnerability.
+3. Copy each note from the group results unchanged.
+4. Write the summary and not_checked last.
 
 ## Output rules
 
-- executive_summary, at most 280 characters: the first thing to do and why it matters now.
-- overall_assessment, at most 280 characters: how serious the overall picture is and how
-  complete the scan was.
-- plain_language_summary, at most 280 characters: what the results mean for the business,
-  in everyday words. Do not repeat the other two summaries.
-- priority_actions, at most five: title at most 60 characters, description at most 220
-  characters with who does it, how much work it is and how to check it worked.
-- important_findings, at most three, one per finding_ref, with the same field limits as
-  the group results.
-- uncertainties, at most three, each at most 160 characters. Name failed finding refs
-  here as vulnerabilities that could not be explained.
+- summary, at most 280 characters: what the results mean for the business and the first
+  thing to do. Do not repeat the totals.
+- tasks, at most six. One task is one action that can fix several vulnerabilities:
+  - title, at most 60 characters: a verb and the thing to fix, such as "Update the
+    software on machine_2" or "Turn off remote login on the router".
+  - who: owner for a step in a simple settings page or app, it_person for anything on a
+    server or the command line, vendor when only the vendor can fix it.
+  - time: how long the task takes the person who does it: 5_minutes, 30_minutes, 1_hour,
+    half_day, 1_day or longer.
+  - steps: one to three steps, each at most 160 characters, in the order the person does
+    them. The last step can say how to check it worked.
+  - fallback, at most 160 characters, or null: a faster step for when the person cannot
+    do the task now, such as "If you cannot update now, unplug the camera from the
+    network".
+  - fixes_fully: true only when the task removes the vulnerability. A workaround is false.
+  - fixes: every finding_ref the task fixes.
+- findings, one note for each vulnerability in the context, at most one per finding_ref:
+  - plain_title, at most 90 characters: the effect in plain words, such as "Anyone on
+    your network can take control of this camera".
+  - cause, at most 160 characters: why, such as "The camera runs old software with a
+    known flaw. No password is needed to use it."
+  - what_could_happen, at most 160 characters: the effect on this kind of machine and how
+    likely it is.
+- not_checked, at most 200 characters, or null: what this scan could not check. Name
+  failed finding refs here as vulnerabilities Dmitri could not explain.
 
 ## Do not
 
 - Do not add a fact that is not in the input. The group results are the only source.
-- Do not drop a known exploited vulnerability to fit the limit. Merge actions instead.
-- Do not repeat the totals in the summaries. Say what they mean.
+- Do not drop a known exploited vulnerability to fit the limit. Merge tasks instead.
+- Do not order the tasks. The screen orders them by time and risk.

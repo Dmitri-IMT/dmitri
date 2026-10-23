@@ -339,17 +339,47 @@ export const catalog: Catalog = {
   'ai.askAboutScan': 'Спросить об этом сканировании',
   'ai.viewFinding': ({ index }) => 'Открыть находку ' + index,
   'ai.genericError': 'Не удалось получить ответ. Попробуйте снова.',
-  'ai.overview': 'Обзор ИИ',
   'ai.overviewDescription': 'Получите обзор этого сканирования простым языком.',
-  'ai.reloadOverview': 'Обновить обзор',
-  'ai.explainScan': 'Объяснить это сканирование',
   'ai.failedOverview':
     'Не удалось подготовить обзор. Результаты сканирования доступны.',
-  'ai.loadFailed': 'Не удалось загрузить обзор.',
-  'ai.notRequestedOverview':
-    'Получите обзор этого сканирования простым языком.',
-  'ai.unavailableOverview':
-    'Сводка ИИ отключена для этого сканирования. Результаты сканирования доступны.',
+  'todo.title': 'Ваш список задач',
+  'todo.fallbackTitle': 'Начните отсюда',
+  'todo.fallbackLead': ({ count }) =>
+    `Проблемы с самым высоким риском Dmitri: ${count}.`,
+  'todo.count': ({ tasks, fixed, total }) =>
+    `Задач: ${tasks} · исправляет ${fixed} из ${total} проблем`,
+  'todo.order': 'Сначала самое простое и важное.',
+  'todo.fixesProblems': ({ count }) => `исправляет проблем: ${count}`,
+  'todo.risk': 'Риск',
+  'todo.showSteps': 'Показать шаги',
+  'todo.hideSteps': 'Скрыть шаги',
+  'todo.sources': 'Источник:',
+  'todo.uncovered': ({ count }) =>
+    `Проблем без простого исправления: ${count}. Они в списке ниже.`,
+  'todo.footer':
+    'Написано ИИ Dmitri по этому сканированию и публичным бюллетеням. Проверьте каждый шаг перед действием.',
+  'todo.notRequested':
+    'Dmitri может написать короткий список задач для этого сканирования, начиная с самых простых исправлений.',
+  'todo.makeList': 'Составить список задач',
+  'todo.leavePage':
+    'Можно уйти с этой страницы. Список появится здесь, когда будет готов. Пока все проблемы есть в списке ниже.',
+  'todo.failed':
+    'Dmitri не смог написать список в этот раз. Результаты сканирования в порядке и полные.',
+  'todo.loadFailed': 'Не удалось загрузить ваш список задач.',
+  'todo.tryAgain': 'Попробовать снова',
+  'todo.requestFailed': 'Dmitri не смог начать список задач. Попробуйте снова.',
+  'todo.nothingToFix': 'По этому сканированию исправлять нечего.',
+  'todo.notProof':
+    'Это не доказывает, что сеть безопасна. Dmitri знает только о проблемах, которые может проверить. Просканируйте снова после добавления машины.',
+  'todo.who.owner': 'Вы',
+  'todo.who.it_person': 'Ваш ИТ-специалист',
+  'todo.who.vendor': 'Производитель',
+  'todo.time.5_minutes': 'около 5 минут',
+  'todo.time.30_minutes': 'около 30 минут',
+  'todo.time.1_hour': 'около 1 часа',
+  'todo.time.half_day': 'около полудня',
+  'todo.time.1_day': 'около 1 дня',
+  'todo.time.longer': 'больше дня',
   'ai.waiting.chatStage': 'Ищем ответ',
   'ai.waiting.chatDetail': 'Это может занять до минуты',
   'ai.waiting.cancel': 'Отмена',
@@ -364,16 +394,6 @@ export const catalog: Catalog = {
   'ai.completedDescription':
     'Простое объяснение данных, зарегистрированных в этом сканировании.',
   'ai.whatToDoFirst': 'Что исправить в первую очередь',
-  'ai.whyVulnerabilities': 'Почему важны эти уязвимости',
-  'ai.recordedVulnerability': 'Зафиксированная уязвимость',
-  'ai.recommendedAction': 'Рекомендуемое действие:',
-  'ai.showDetails': 'Показать детали оценки и ограничения',
-  'ai.showOverview': 'Показать сводку ИИ',
-  'ai.cannotConfirm': 'Что нельзя подтвердить этим сканированием',
-  'ai.priorityImmediate': 'Немедленно',
-  'ai.priorityHigh': 'Высокий приоритет',
-  'ai.priorityMedium': 'Средний приоритет',
-  'ai.priorityLow': 'Низкий приоритет',
   'reports.title': 'Отчеты сканирования',
   'reports.description': 'Выберите отчет для скачивания.',
   'reports.preparing': 'Подготовка отчета...',

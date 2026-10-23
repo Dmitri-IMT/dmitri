@@ -785,7 +785,7 @@ describe('ScanDetail', () => {
     expect(stopped).toHaveTextContent(
       'This scan was stopped before the Pi sent any results.',
     )
-    expect(screen.queryByTestId(/^scan-ai-/)).not.toBeInTheDocument()
+    expect(screen.queryByTestId(/^todo-/)).not.toBeInTheDocument()
     expectNoScanTables()
     expect(screen.queryByTestId('scan-reports')).not.toBeInTheDocument()
 
@@ -821,9 +821,7 @@ describe('ScanDetail', () => {
     ).toBeInTheDocument()
     expect(screen.getByTestId('scan-hosts-table')).toBeInTheDocument()
     expect(screen.queryByTestId('scan-stopped')).not.toBeInTheDocument()
-    expect(
-      await screen.findByTestId('scan-ai-not-requested'),
-    ).toBeInTheDocument()
+    expect(await screen.findByTestId('todo-not-requested')).toBeInTheDocument()
 
     const strip = screen.getByTestId('scan-summary-strip')
     expect(strip).toHaveTextContent('Machines seen')
@@ -1136,8 +1134,8 @@ describe('ScanDetail', () => {
     scanDetail(completedPartial)
     const view = renderPage(`/scans/${SCAN_ID}`)
 
-    expect(await screen.findByTestId('scan-ai-unavailable')).toHaveTextContent(
-      'AI summaries are disabled for this scan.',
+    expect(await screen.findByTestId('todo-fallback')).toHaveTextContent(
+      'Nothing to fix from this scan.',
     )
     expect(await screen.findByTestId('scan-no-findings')).toHaveTextContent(
       'No confirmed vulnerabilities in accepted evidence.',

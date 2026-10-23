@@ -13,7 +13,7 @@ from sqlmodel import Session, select
 
 from api.core.config import Settings
 from api.models.persistence import AIFixRecord, KevRecord, NvdCacheRecord
-from api.schemas.ai import ProviderCVEFixResearch
+from api.schemas.ai import AISourceLink, ProviderCVEFixResearch
 from api.services.ai.context import (
     AIFindingContext,
     AIFixOptionContext,
@@ -129,6 +129,10 @@ def _apply(
         for ref in item.finding_refs:
             finding = by_ref[ref]
             finding.version_affected = item.record["version_affected"]
+            finding._fix_sources = [
+                AISourceLink(name=option["source_name"], url=option["source_url"])
+                for option in item.record["options"]
+            ]
             finding.fix_options = [
                 AIFixOptionContext(
                     effort=option["effort"],

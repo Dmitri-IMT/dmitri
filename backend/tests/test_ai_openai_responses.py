@@ -4,10 +4,10 @@ import json
 
 import httpx
 import pytest
+from ai_shapes import child_analysis, empty_analysis
 from api.core.config import Settings
 from api.schemas.ai import (
     ProviderScanAIAnalysis,
-    ProviderScanAIChildAnalysis,
 )
 from api.schemas.read import (
     FindingEvidenceConfidenceCounts,
@@ -66,14 +66,7 @@ def _context(
 
 
 def _analysis() -> ProviderScanAIAnalysis:
-    return ProviderScanAIAnalysis(
-        executive_summary="Nenhum risco prioritário foi identificado.",
-        overall_assessment="O scan não apresentou findings para priorização.",
-        plain_language_summary="Nada urgente apareceu neste resultado.",
-        priority_actions=[],
-        important_findings=[],
-        uncertainties=["A ausência de findings não comprova ausência de risco."],
-    )
+    return empty_analysis()
 
 
 def _completed(text: str, **extra: object) -> dict[str, object]:
@@ -157,9 +150,7 @@ def test_every_operation_uses_the_configured_output_budget():
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
         budgets.append(payload["max_output_tokens"])
-        child = ProviderScanAIChildAnalysis(
-            priority_actions=[], important_findings=[], uncertainties=[]
-        )
+        child = child_analysis()
         text = (
             child.model_dump_json()
             if "CHUNK_CONTEXT_JSON:" in payload["input"]
@@ -220,17 +211,13 @@ def test_provider_keeps_coverage_notice_on_chunk_and_repair():
 
     def handler(request: httpx.Request) -> httpx.Response:
         prompts.append(json.loads(request.content)["input"])
-        child = ProviderScanAIChildAnalysis(
-            priority_actions=[],
-            important_findings=[],
-            uncertainties=[],
-        )
+        child = child_analysis()
         return httpx.Response(200, json=_completed(child.model_dump_json()))
 
     provider = _provider(handler)
     context = _context(completeness="partial", stopped_by="timeout")
     provider.analyze_chunk(context)
-    provider.repair_chunk(context, ("important_findings:style",))
+    provider.repair_chunk(context, ("findings:style",))
 
     assert len(prompts) == 2
     for prompt in prompts:
@@ -278,7 +265,7 @@ def test_instructions_keep_evidence_uncertainty_and_sample_limits():
         _context()
     )
 
-    assert AI_PROMPT_VERSION == "10"
+    assert AI_PROMPT_VERSION == "11"
     instructions = _flat(captured["payload"]["instructions"])
     for rule in (
         "inconclusive, conflicting or truncated evidence is never a confirmed problem",
@@ -294,18 +281,16 @@ def test_instructions_keep_evidence_uncertainty_and_sample_limits():
 @pytest.mark.parametrize(
     ("operation", "task_heading", "repair"),
     [
-        ("analyze_scan", "# Task: explain a whole scan", False),
-        ("analyze_chunk", "# Task: explain one group of vulnerabilities", False),
+        ("analyze_scan", "# Task: write the to-do list for a whole scan", False),
+        ("analyze_chunk", "# Task: write tasks for one group", False),
         ("synthesize_scan", "# Task: combine group results", False),
-        ("repair_analysis", "# Task: explain a whole scan", True),
-        ("repair_chunk", "# Task: explain one group of vulnerabilities", True),
+        ("repair_analysis", "# Task: write the to-do list for a whole scan", True),
+        ("repair_chunk", "# Task: write tasks for one group", True),
     ],
 )
 def test_each_operation_sends_voice_then_its_task_file(operation, task_heading, repair):
     captured: dict[str, object] = {}
-    child = ProviderScanAIChildAnalysis(
-        priority_actions=[], important_findings=[], uncertainties=[]
-    )
+    child = child_analysis()
     text = (
         child.model_dump_json()
         if operation.endswith("_chunk")
@@ -348,17 +333,17 @@ def test_provider_repair_sends_codes_not_rejected_prose():
     _provider(_capture(captured, _analysis().model_dump_json())).repair_analysis(
         _context(),
         (
-            "executive_summary:safety_certification",
+            "summary:safety_certification",
             "analysis contains an unknown reference",
             "analysis contains duplicate finding references",
         ),
     )
 
     repair_prompt = captured["payload"]["input"]
-    assert "executive_summary:safety_certification" in repair_prompt
+    assert "summary:safety_certification" in repair_prompt
     assert "do not describe a network, machine, or service as safe" in repair_prompt
     assert "use only finding_N and machine_N references" in repair_prompt
-    assert "one important finding explanation per finding_ref" in repair_prompt
+    assert "one finding note per finding_ref" in repair_prompt
     assert "Your network is safe." not in repair_prompt
 
 
@@ -464,7 +449,7 @@ def test_provider_exposes_rate_limit_wait_time(headers, seconds):
         ({"status": "completed", "output": []}, "invalid_provider_response"),
         ({"status": "failed", "output": []}, "invalid_provider_response"),
         (_completed("not-json"), "invalid_provider_response"),
-        (_completed('{"executive_summary": 1}'), "invalid_provider_response"),
+        (_completed('{"summary": 1}'), "invalid_provider_response"),
     ],
 )
 def test_provider_fails_terminally_on_unusable_responses(body, code):
