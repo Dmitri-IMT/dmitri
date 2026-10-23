@@ -4,7 +4,7 @@ title: Deployment (install scripts + Railway)
 description: Dev-environment installers, the local Pi simulator, and the three-service Railway + Supabase topology.
 resource: install.sh
 tags: [infra, deployment, railway, install, env]
-timestamp: 2026-10-01T00:00:00Z
+timestamp: 2026-10-23T00:00:00Z
 ---
 
 # Deployment (install scripts + Railway)
@@ -103,6 +103,12 @@ ownership and line references are kept in [Local Pi simulator](./pi-simulator.md
 
 ## Notes / gotchas
 
+- **Failed workflow validation can skip an API deployment.** The agent-release
+  workflow sets `GNUPGHOME` in the two signing steps, where `runner.temp` is a
+  valid expression context. Job-level environment values cannot use `runner`;
+  GitHub rejects that workflow before starting jobs and Railway's CI gate skips
+  deployment. Check Railway's actual deployment status and `skippedReason`, since
+  GitHub's Railway status can still report success for a skipped deployment.
 - **`DATABASE_URL_DIRECT` must never reach a Railway service.** It carries the administrative
   credential and is only exported transiently from the operator's local `.env` for a single
   `alembic` command, then unset. Re-run `railway variable list --json` after provisioning to
