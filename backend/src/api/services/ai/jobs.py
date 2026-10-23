@@ -437,6 +437,7 @@ def _process_claimed_analysis(
         )
         return fail("invalid_analysis", False)
     except Exception:
+        session.rollback()
         logger.error(
             "AI analysis job failed scan_id=%s phase=%s code=internal_error",
             record.scan_id,
