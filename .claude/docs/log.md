@@ -5,6 +5,10 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-10-23
 
+* **Update**: Fixed the agent-release workflow's runner context by scoping
+  `GNUPGHOME` to its signing steps. Invalid job-level context prevented workflow
+  validation and caused Railway to skip the API's MCP deployments through its CI gate.
+
 * **Update**: Removed the MCP setup modal's lock and organization/read-only banner.
   Selected client tabs now use a soft theme-aware gray fill in light and dark mode.
 

@@ -172,8 +172,6 @@ jobs:
       name: agent-release-signing
     permissions:
       contents: read
-    env:
-      GNUPGHOME: ${{ runner.temp }}/agent-signing-home
     outputs:
       should_publish: ${{ steps.prepare.outputs.should_publish }}
     steps:
@@ -191,6 +189,7 @@ jobs:
       - name: Verify approved key and import signing-only subkey
         shell: bash
         env:
+          GNUPGHOME: ${{ runner.temp }}/agent-signing-home
           SUBKEY_ASC: ${{ secrets.AGENT_APT_SIGNING_SUBKEY }}
           PASSPHRASE: ${{ secrets.AGENT_APT_SIGNING_PASSPHRASE }}
         run: |
@@ -218,6 +217,7 @@ jobs:
         id: prepare
         shell: bash
         env:
+          GNUPGHOME: ${{ runner.temp }}/agent-signing-home
           PRIMARY_FINGERPRINT: 92BD91D03608EA3AFDB108AAB7EEC4E4E954DA7A
         run: |
           set -euo pipefail
