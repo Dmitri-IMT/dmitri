@@ -80,7 +80,7 @@ The React 19 + TypeScript SPA. Full listing in [frontend/index.md](./frontend/in
 * [frontend/agent-update-section](./frontend/agent-update-section.md) — DeviceDetail's localized update availability, readiness, version, operation-history and confirmed admin request section.
 * [frontend/agent-update-hook](./frontend/agent-update-hook.md) — Device update queries, active-operation polling, request idempotency, cache reconciliation and deduplicated read-error notifications.
 * [frontend/scan-ai](./frontend/scan-ai.md) — Scan Detail card that GETs analysis status, offers Explain this scan once, polls only while pending or processing, and renders the Groq overview when completed.
-* [frontend/MCP settings and browser consent](./frontend/mcp.md) — Inline MCP setup for Codex and Claude Code, copyable commands and prompts, browser consent, and current-user connection management.
+* [frontend/MCP settings and browser consent](./frontend/mcp.md) — Compact MCP settings with a setup modal for Codex and Claude Code, copyable commands and prompts, and current-user connection controls.
 * [frontend/tables](./frontend/tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
 * [frontend/host-detail](./frontend/host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states, and the host's findings section owns its own.
 * [frontend/screens](./frontend/screens.md) — The public and guarded screens, scan-detail progress display, 70rem app frame, centred navigation, Settings with AI usage and admin data deletion, and shared presentation and interaction components.

@@ -45,7 +45,7 @@ table. App source lives at `frontend/src/`; the local lint plugin lives at `fron
 * [context-ai](./context-ai.md) — One-shot "Explain with AI" (finding, host) via ContextChat's presetQuestion mode against `/ai/chat`, askable once per mount. GlobalAssistant (the floating multi-turn assistant) was deleted.
 * [home-ai-overview](./home-ai-overview.md) — Home teaser for the latest successful scan's analysis status.
 * [ai-usage](./ai-usage.md) — Settings panel for org-wide provider usage totals and recent operations.
-* [MCP settings and browser consent](./mcp.md) — Inline MCP setup for Codex and Claude Code, copyable commands and prompts, browser consent, and current-user connection management.
+* [MCP settings and browser consent](./mcp.md) — Compact MCP settings with a setup modal for Codex and Claude Code, copyable commands and prompts, and current-user connection controls.
 * [tables](./tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
 * [host-detail](./host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states with back links, and each independent second read owns its own section states.
 * [screens](./screens.md) — The public and guarded screens, scan-detail progress display, 70rem app frame, centred navigation, Settings with AI usage and admin data deletion, and shared presentation and interaction components.
