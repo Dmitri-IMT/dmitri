@@ -424,6 +424,12 @@ behaviour, not a bug — ingest a scan through the agent to see populated data.
 
 ## Gotchas
 
+- **Optional MCP access:** set `MCP_PUBLIC_URL=http://127.0.0.1:8000/mcp`
+  in `backend/.env` and restart the API to connect local Codex or Claude Code.
+  Keep `APP_BASE_URL=http://localhost:5173` for browser sign-in and consent.
+  Apply Alembic head first. Leaving the MCP URL empty keeps it disabled.
+  See [MCP setup](../backend/MCP.md) for commands and production activation.
+
 Each of these has cost someone an afternoon:
 
 - **`REFRESH_COOKIE_SECURE=true` over `http://`.** The default is `true` (correct for
