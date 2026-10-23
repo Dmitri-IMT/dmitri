@@ -3,6 +3,21 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-23
+
+* **Creation**: Added the frontend MCP code-map for inline Settings setup, local
+  assistant commands, browser consent, organization scope, and own connections.
+* **Update**: Settings now documents the enabled MCP section with Codex and Claude
+  Code tabs, configured endpoint commands, evidence-aware prompts, permissions,
+  and clipboard feedback in English, Brazilian Portuguese, and Russian.
+
+## 2026-10-22
+
+* **Creation**: Added the read-only MCP code-map and setup guide, covering
+  per-user OAuth, organization checks, historical NSPi reads, and revocation.
+* **Update**: Indexed the optional backend MCP endpoint and documented local
+  activation through `MCP_PUBLIC_URL`.
+
 ## 2026-10-20
 
 * **Creation**: Added the frontend device update section/hook code-map docs for localized

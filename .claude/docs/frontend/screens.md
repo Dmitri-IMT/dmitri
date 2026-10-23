@@ -4,7 +4,7 @@ title: frontend screens, shells and shared components
 description: The public and guarded screens, scan-detail progress display, 70rem app frame, centred navigation, Settings with AI usage and admin data deletion, and shared presentation and interaction components.
 resource: frontend/src/pages/
 tags: [frontend, ui, screens, react, accessibility]
-timestamp: 2026-10-16T23:00:00Z
+timestamp: 2026-10-23T00:00:00Z
 ---
 
 # frontend screens, shells and shared components
@@ -30,7 +30,7 @@ the no-device Devices blank is the one blank state with no action.
 | `arrival` | The router state snapshotted once at mount as `'passwordReset' \| 'accountDeleted' \| null`, switching the copy of the **single** `role="status"` region (`data-testid="login-success"`). One region, two notes — a second status element would break `getByRole('status')`. The same Effect that focuses the note runs `navigate(location.pathname, { replace: true })`, so neither note survives a reload. | `frontend/src/pages/Login.tsx:19` |
 | `ForgotPassword` | The recovery request form in `AuthShell`. A `204` **replaces** the form with a confirmation that is byte-for-byte identical for known and unknown addresses — the anti-enumeration boundary. Posts exactly `{ email }`. | `frontend/src/pages/ForgotPassword.tsx:10` |
 | `ResetPassword` | Reads `token` from the query string with `useSearchParams` and never renders it. Both password fields are `PasswordInput`. Posts `{ token, new_password }` — the confirmation value stays client-side. On `204` it creates **no session** and navigates to `/login` with `replace` plus a `{ passwordReset: true }` marker. | `frontend/src/pages/ResetPassword.tsx:16` |
-| `Settings` | Guarded surface: **Your account** (read-only email/role, change-password, activity disclosure), [`AIUsagePanel`](./ai-usage.md), then after the `<hr>` the admin-only `DeleteDataPanel`, then **Leave this organisation**. |
+| `Settings` | Guarded surface: **Your account** (read-only email/role, change-password, activity disclosure), [`AIUsagePanel`](./ai-usage.md), the optional inline [MCP section](./mcp.md) with client setup, usage prompts and own connections, then after the `<hr>` the admin-only `DeleteDataPanel`, then **Leave this organisation**. |
 | `DeleteDataPanel` | Admin-only (`AdminOnly`, so absent for viewers) "Delete data" section with `settings-delete-scans-trigger` and `settings-delete-machines-trigger`. One shared `ConfirmByTyping` gated on `user.org_name`; success shows a toast with the counts (skipped running scans included) and calls `useRefreshAfterDelete`; failure keeps the dialog open with its error. | `frontend/src/pages/settings/DeleteDataPanel.tsx` | `frontend/src/pages/Settings.tsx:19` |
 | `Settings` — account group | Inline read-only identity in a `<dl>` — `AccountDetails` was folded in. Email and role render `ValuePlaceholder` skeleton bars until `user` arrives so the finished page shape draws immediately and never shifts as the profile loads. | `frontend/src/pages/Settings.tsx:44` |
 | `Settings` — leaving section | The second group is always mounted: explanation, a `settings-leave-trigger` that stays `disabled` until `user` is known, and a `ConfirmByTyping` rendered only when `user` is non-null, gated on `user.email`. `handleLeave()` reads `readApiError(err)` and shows the last-admin refusal only on `409` + `last_admin`, a generic retry message otherwise; the dialog stays open on both, so the still-live confirm button *is* the retry. | `frontend/src/pages/Settings.tsx:101` |
