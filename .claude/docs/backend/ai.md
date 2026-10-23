@@ -115,7 +115,7 @@ Each language is a separate job and a separate provider run.
 - **Ingest can write `ai_scan_analyses`.** With `AI_AUTO_ANALYSIS` on, `persist_scan` enqueues the
   `en` row in the same transaction. Other languages are only ever created by a member POST.
 - **`supports_bounded_scan_analysis()`** selects chunked analysis inside the worker's `run_bounded_analysis()` call. Failed children remain visible in coverage counts.
-- **Retired vocabulary must be named in the prompt.** `WRITING_SKILL_INSTRUCTIONS` and the `retired_vocabulary` repair guidance in `_writing_guidance()` list every word in `_RETIRED_WORDS` with its replacement (vulnerability, machine). The lint matches those English words in any language; when the prompt stopped naming them, English overviews failed `style_violation` even after repair.
+- **Retired vocabulary must be named in the prompt.** `services/ai/instructions/voice.md` and the `retired_vocabulary` repair guidance in `_writing_guidance()` list every word in `_RETIRED_WORDS` with its replacement (vulnerability, machine). The lint matches those English words in any language; when the prompt stopped naming them, English overviews failed `style_violation` even after repair.
 - **Writing and grounding repairs** log only the validation phase and category. The worker never logs provider response text; rejected prose is not sent back to Groq.
 - **PDF rendering needs a Unicode TTF on the host.** `_register_unicode_fonts()`
   (`_register_unicode_fonts` in `report_pdf.py`) looks only at fixed paths — macOS Supplemental Arial,

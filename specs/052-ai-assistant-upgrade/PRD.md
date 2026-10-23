@@ -254,7 +254,10 @@ six places. Each place answers one question the user has:
 1. Test calls for open items 1–3 (one script, no product code).
 2. R1 — model and provider. **Built 2026-10-23** (`services/ai/openai_responses.py`,
    migration `20261023_44` adds `ai_usage.cached_input_tokens` and `reasoning_tokens`).
-3. R2 — instruction files and `voice.md`.
+3. R2 — instruction files and `voice.md`. **Built 2026-10-23** (`services/ai/instructions/`:
+   `voice.md`, `scan.md`, `chunk.md`, `synthesis.md`, `repair.md`, `chat.md`;
+   `AI_PROMPT_VERSION` 8, `WRITING_SKILL_VERSION` 2). The CVE research file comes with R3,
+   which adds its caller and schema. Chat stays plain text until R5 renders lists.
 4. R3 — CVE research step and cache (updates DMI-169).
 5. R4 + R5 + waiting state — chat search, source links, loader.
 6. R6 entry point — separate issue.

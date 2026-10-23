@@ -125,7 +125,7 @@ def test_analysis_request_creates_one_pending_job(
     record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
     assert record.scan_id == seeded["scan"].scan_id
     assert record.status == "pending"
-    assert record.writing_skill_version == "1"
+    assert record.writing_skill_version == WRITING_SKILL_VERSION
 
     portuguese = client.post(f"{url}?language=pt-BR", headers=headers)
     assert portuguese.status_code == 202
