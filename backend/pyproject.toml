@@ -22,7 +22,8 @@ dependencies = [
   "argon2-cffi>=23.1.0",
   "cryptography>=42.0",
   "websockets>=13",
-  "reportlab>=4.2"
+  "reportlab>=4.2",
+  "mcp>=1.30,<2",
 ]
 
 [project.scripts]
