@@ -629,3 +629,25 @@ def test_build_ai_provider_uses_settings_and_requires_a_key(
         "country": "BR",
         "timezone": "America/Sao_Paulo",
     }
+
+
+@pytest.mark.parametrize("scope, fields", [
+    ("scan", {"in_short": "Check the to-do list.", "meanings": [],
+              "not_seen": ["Passwords were not checked."]}),
+    ("host", {"what_it_is": "This is probably a camera.",
+              "problems": "Its software needs an update."}),
+])
+def test_explanations_use_task_specific_strict_schema_without_search(scope, fields):
+    captured = {}
+    provider = _provider(_capture(captured, json.dumps(fields)))
+    result = provider.explain_context(
+        {"facts": {"scope": scope}, "allowed_leads": []},
+        scope=scope, language="pt-BR",
+    )
+    assert result.model_dump() == fields
+    payload = captured["payload"]
+    assert payload["store"] is False
+    assert payload["text"]["format"]["strict"] is True
+    assert payload["text"]["format"]["name"] == f"{scope}_explanation"
+    assert "tools" not in payload
+    assert provider.drain_usage_events()[0].operation == f"explain_{scope}"

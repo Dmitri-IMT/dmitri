@@ -5,20 +5,25 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func
+from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session, select
 
 from api.core.config import Settings, get_settings
 from api.db.session import get_session
 from api.dependencies.auth import CallerIdentity, require_user
 from api.errors import ApiError
-from api.models.persistence import AIUsageRecord
+from api.models.persistence import AIExplanationRecord, AIUsageRecord
 from api.schemas.ai import (
     AIChatHistoryResponse,
     AIChatResponse,
     AIContextChatRequest,
+    AIExplainRequest,
+    AIExplanationResponse,
     AIUsageEntry,
     AIUsageResponse,
     AIUsageSummary,
+    MachineExplanationResponse,
+    ScanExplanationResponse,
 )
 from api.services.ai.chat import (
     AIChatContextBundle,
@@ -33,7 +38,9 @@ from api.services.ai.chat import (
 )
 from api.services.ai.chat_errors import chat_api_error_message
 from api.services.ai.context import describe_observed_products
+from api.services.ai.explanations import explanation_context, materialize_explanation
 from api.services.ai.openai_responses import (
+    AI_PROMPT_VERSION,
     AIProviderError,
     ai_is_available,
     build_ai_provider,
@@ -155,7 +162,7 @@ def ask_context_chat(
     asked_today = session.exec(
         select(func.count(AIUsageRecord.id)).where(
             AIUsageRecord.user_id == caller.sub,
-            AIUsageRecord.operation == "chat",
+            AIUsageRecord.operation.in_(("chat", "explain_scan", "explain_host")),
             AIUsageRecord.created_at >= now - timedelta(days=1),
         )
     ).one()
@@ -245,6 +252,108 @@ def ask_context_chat(
             "The AI assistant could not answer this question.",
             code="ai_provider_error",
         ) from exc
+
+
+@router.post(
+    "/api/v1/ai/explain",
+    response_model=AIExplanationResponse,
+    operation_id="explainAIContext",
+)
+def explain_context(
+    payload: AIExplainRequest,
+    session: Session = Depends(get_session),
+    caller: CallerIdentity = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+) -> AIExplanationResponse:
+    resolved = explanation_context(
+        session, payload.scope, payload.context_id, caller.org_id, payload.language
+    )
+    if resolved is None:
+        raise HTTPException(status_code=404, detail="Context not found")
+    bundle, scan_id, leads = resolved
+    cached = session.exec(
+        select(AIExplanationRecord).where(
+            AIExplanationRecord.scope == payload.scope,
+            AIExplanationRecord.context_id == payload.context_id,
+            AIExplanationRecord.language == payload.language,
+            AIExplanationRecord.prompt_version == AI_PROMPT_VERSION,
+        )
+    ).first()
+    response_type = (
+        ScanExplanationResponse if payload.scope == "scan"
+        else MachineExplanationResponse
+    )
+    if cached is not None and cached.scan_id == scan_id:
+        return response_type(
+            scope=payload.scope, context_id=payload.context_id,
+            language=payload.language, created_at=cached.created_at,
+            explanation=cached.explanation_json,
+        )
+    if not ai_is_available(settings):
+        raise ApiError(503, "The AI assistant is unavailable.", code="ai_unavailable")
+    now = datetime.now(timezone.utc)
+    asked_today = session.exec(
+        select(func.count(AIUsageRecord.id)).where(
+            AIUsageRecord.user_id == caller.sub,
+            AIUsageRecord.operation.in_(("chat", "explain_scan", "explain_host")),
+            AIUsageRecord.created_at >= now - timedelta(days=1),
+        )
+    ).one()
+    if asked_today >= settings.ai_chat_daily_limit:
+        raise ApiError(
+            429,
+            chat_api_error_message(
+                "ai_daily_limit", language=payload.language,
+                limit=settings.ai_chat_daily_limit,
+            ),
+            code="ai_daily_limit",
+        )
+    provider = build_ai_provider(settings)
+    assert provider is not None
+    try:
+        result = provider.explain_context(
+            {"facts": bundle.provider_context.model_dump(mode="json"),
+             "allowed_leads": leads},
+            scope=payload.scope, language=payload.language,
+        )
+        explanation = materialize_explanation(result, bundle, leads)
+    except AIProviderError as exc:
+        persist_usage_events(
+            session, drain_provider_usage(provider), scan_id=scan_id,
+            org_id=caller.org_id, user_id=caller.sub,
+        )
+        code = (
+            "ai_rate_limited" if exc.code == "provider_rate_limited"
+            else "ai_provider_error"
+        )
+        raise ApiError(
+            429 if code == "ai_rate_limited" else 502,
+            "Dmitri could not explain this context right now.", code=code,
+        ) from exc
+    persist_usage_events(
+        session, drain_provider_usage(provider), scan_id=scan_id,
+        org_id=caller.org_id, user_id=caller.sub, commit=False,
+    )
+    values = dict(
+        scope=payload.scope, context_id=payload.context_id,
+        scan_id=scan_id, language=payload.language,
+        prompt_version=AI_PROMPT_VERSION,
+        explanation_json=explanation.model_dump(mode="json"), created_at=now,
+    )
+    session.execute(
+        insert(AIExplanationRecord).values(**values).on_conflict_do_update(
+            constraint="uq_ai_explanations_context",
+            set_={
+                key: values[key]
+                for key in ("scan_id", "explanation_json", "created_at")
+            },
+        )
+    )
+    session.commit()
+    return response_type(
+        scope=payload.scope, context_id=payload.context_id,
+        language=payload.language, created_at=now, explanation=explanation,
+    )
 
 
 def _resolve_scan_id(

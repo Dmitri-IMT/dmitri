@@ -195,6 +195,63 @@ class ProviderCVEFixResearch(BaseModel):
     options: Annotated[list[ProviderFixOption], Field(max_length=3)]
 
 
+class AIExplainRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: Literal["scan", "host"]
+    context_id: UUID
+    language: AILanguage = "en"
+
+
+class ExplanationPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    lead: Annotated[str, Field(min_length=3, max_length=200)]
+    text: Annotated[str, Field(min_length=3, max_length=600)]
+
+
+class ScanExplanation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    in_short: Annotated[str, Field(min_length=3, max_length=1000)]
+    meanings: Annotated[list[ExplanationPoint], Field(max_length=4)]
+    not_seen: Annotated[
+        list[Annotated[str, Field(min_length=3, max_length=600)]],
+        Field(max_length=4),
+    ]
+
+
+class MachineExplanation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    what_it_is: Annotated[str, Field(min_length=3, max_length=600)]
+    problems: Annotated[str, Field(min_length=3, max_length=600)]
+
+
+class _AIExplanationEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    context_id: UUID
+    language: AILanguage
+    created_at: datetime
+
+
+class ScanExplanationResponse(_AIExplanationEnvelope):
+    scope: Literal["scan"]
+    explanation: ScanExplanation
+
+
+class MachineExplanationResponse(_AIExplanationEnvelope):
+    scope: Literal["host"]
+    explanation: MachineExplanation
+
+
+AIExplanationResponse = Annotated[
+    ScanExplanationResponse | MachineExplanationResponse,
+    Field(discriminator="scope"),
+]
+
+
 class ScanAIAnalysisUnavailable(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

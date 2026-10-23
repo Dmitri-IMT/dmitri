@@ -262,10 +262,15 @@ def build_finding_contexts(
                 evidence_truncated=finding.evidence_truncated,
                 risk_score=finding.risk_score,
                 exploitability=finding.exploitability,
-                epss_score=epss.epss_score if epss is not None else None,
+                epss_score=(
+                    epss.epss_score if epss is not None else finding.epss_score
+                ),
                 epss_percentile=epss.percentile if epss is not None else None,
-                is_kev=kev is not None,
-                known_ransomware=kev.known_ransomware if kev is not None else False,
+                is_kev=kev is not None or finding.kev_listed,
+                known_ransomware=(
+                    kev.known_ransomware if kev is not None
+                    else finding.known_ransomware
+                ),
             )
         )
     return bundle

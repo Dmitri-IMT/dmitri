@@ -508,6 +508,29 @@ class AIScanAnalysisRecord(SQLModel, table=True):
     )
 
 
+class AIExplanationRecord(SQLModel, table=True):
+    __tablename__ = "ai_explanations"
+    __table_args__ = (
+        UniqueConstraint(
+            "scope",
+            "context_id",
+            "language",
+            "prompt_version",
+            name="uq_ai_explanations_context",
+        ),
+        CheckConstraint("scope IN ('scan', 'host')", name="ck_ai_explanations_scope"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    scope: str
+    context_id: UUID = Field(index=True)
+    scan_id: UUID = Field(index=True, foreign_key="scans.scan_id")
+    language: str
+    prompt_version: str
+    explanation_json: dict[str, Any] = Field(sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+
+
 class AIChatMessageRecord(SQLModel, table=True):
     __tablename__ = "ai_chat_messages"
 

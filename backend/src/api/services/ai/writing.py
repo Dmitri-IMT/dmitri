@@ -3,7 +3,12 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-from api.schemas.ai import ProviderScanAIAnalysis, ProviderScanAIChildAnalysis
+from api.schemas.ai import (
+    MachineExplanation,
+    ProviderScanAIAnalysis,
+    ProviderScanAIChildAnalysis,
+    ScanExplanation,
+)
 
 WRITING_SKILL_VERSION = "3"
 
@@ -90,23 +95,51 @@ class WritingStyleViolation(ValueError):
 
 
 def lint_provider_analysis(analysis: ProviderScanAIAnalysis) -> None:
-    _lint_prose(analysis)
+    _lint_fields(_prose_fields(analysis))
 
 
 def lint_provider_child_analysis(analysis: ProviderScanAIChildAnalysis) -> None:
-    _lint_prose(analysis)
+    _lint_fields(_prose_fields(analysis))
 
 
-def _lint_prose(
-    analysis: ProviderScanAIAnalysis | ProviderScanAIChildAnalysis,
-) -> None:
+def scan_explanation_violations(explanation: ScanExplanation) -> list[str]:
+    fields = [("in_short", explanation.in_short, 300)]
+    for index, point in enumerate(explanation.meanings):
+        fields.extend(
+            [
+                (f"meanings[{index}].lead", point.lead, 80),
+                (f"meanings[{index}].text", point.text, 200),
+            ]
+        )
+    fields.extend(
+        (f"not_seen[{index}]", item, 200)
+        for index, item in enumerate(explanation.not_seen)
+    )
+    return _field_violations(fields)
+
+
+def machine_explanation_violations(explanation: MachineExplanation) -> list[str]:
+    return _field_violations(
+        [
+            ("what_it_is", explanation.what_it_is, 200),
+            ("problems", explanation.problems, 240),
+        ]
+    )
+
+
+def _lint_fields(fields: list[tuple[str, str, int]]) -> None:
+    violations = _field_violations(fields)
+    if violations:
+        raise WritingStyleViolation(violations)
+
+
+def _field_violations(fields: list[tuple[str, str, int]]) -> list[str]:
     violations: list[str] = []
-    for field, value, limit in _prose_fields(analysis):
+    for field, value, limit in fields:
         if len(value) > limit:
             violations.append(f"{field}:too_long")
         violations.extend(_text_violations(field, value))
-    if violations:
-        raise WritingStyleViolation(violations)
+    return violations
 
 
 def _prose_fields(

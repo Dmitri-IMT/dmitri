@@ -15,9 +15,11 @@ from pydantic import BaseModel, ValidationError
 
 from api.core.config import Settings
 from api.schemas.ai import (
+    MachineExplanation,
     ProviderCVEFixResearch,
     ProviderScanAIAnalysis,
     ProviderScanAIChildAnalysis,
+    ScanExplanation,
 )
 from api.services.ai.context import AIChatContext, FixResearchTarget, ScanAIContext
 
@@ -256,6 +258,18 @@ class OpenAIResponsesProvider:
             operation="analysis_synthesis",
             task="synthesis",
             language=language,
+        )
+
+    def explain_context(
+        self, context: dict[str, object], *, scope: str, language: str = "en"
+    ) -> ScanExplanation | MachineExplanation:
+        return self._complete(
+            "EXPLANATION_CONTEXT_JSON:\n" + json.dumps(context, ensure_ascii=False),
+            ScanExplanation if scope == "scan" else MachineExplanation,
+            operation=f"explain_{scope}",
+            task="explain-scan" if scope == "scan" else "explain-machine",
+            language=language,
+            schema_name=f"{scope}_explanation",
         )
 
     def answer_question(

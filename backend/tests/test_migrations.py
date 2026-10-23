@@ -61,6 +61,7 @@ RUNTIME_GRANTS_BY_TABLE = {
             "hosts",
             "commands",
             "ai_scan_analyses",
+            "ai_explanations",
         ),
         DELETABLE_RUNTIME_GRANTS,
     ),

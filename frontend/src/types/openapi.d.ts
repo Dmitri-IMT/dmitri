@@ -196,6 +196,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/explain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Explain Context */
+        post: operations["explainAIContext"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/chat": {
         parameters: {
             query?: never;
@@ -2809,6 +2826,96 @@ export interface components {
         ErrorResponse: {
             error: components["schemas"]["ErrorBody"];
         };
+        /** AIExplainRequest */
+        AIExplainRequest: {
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "scan" | "host";
+            /**
+             * Context Id
+             * Format: uuid
+             */
+            context_id: string;
+            /**
+             * Language
+             * @default en
+             * @enum {string}
+             */
+            language: "en" | "pt-BR" | "ru";
+        };
+        /** ExplanationPoint */
+        ExplanationPoint: {
+            /** Lead */
+            lead: string;
+            /** Text */
+            text: string;
+        };
+        /** ScanExplanation */
+        ScanExplanation: {
+            /** In Short */
+            in_short: string;
+            /** Meanings */
+            meanings: components["schemas"]["ExplanationPoint"][];
+            /** Not Seen */
+            not_seen: string[];
+        };
+        /** MachineExplanation */
+        MachineExplanation: {
+            /** What It Is */
+            what_it_is: string;
+            /** Problems */
+            problems: string;
+        };
+        /** ScanExplanationResponse */
+        ScanExplanationResponse: {
+            /**
+             * Context Id
+             * Format: uuid
+             */
+            context_id: string;
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "en" | "pt-BR" | "ru";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            scope: "scan";
+            explanation: components["schemas"]["ScanExplanation"];
+        };
+        /** MachineExplanationResponse */
+        MachineExplanationResponse: {
+            /**
+             * Context Id
+             * Format: uuid
+             */
+            context_id: string;
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "en" | "pt-BR" | "ru";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            scope: "host";
+            explanation: components["schemas"]["MachineExplanation"];
+        };
     };
     responses: {
         /** @description Successful CORS preflight response. */
@@ -3772,6 +3879,39 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    explainAIContext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AIExplainRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanExplanationResponse"] | components["schemas"]["MachineExplanationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     askContextAI: {

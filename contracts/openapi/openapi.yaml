@@ -591,6 +591,39 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/v1/ai/explain:
+    post:
+      summary: Explain Context
+      operationId: explainAIContext
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIExplainRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - $ref: '#/components/schemas/ScanExplanationResponse'
+                - $ref: '#/components/schemas/MachineExplanationResponse'
+                title: Response Explainaicontext
+                discriminator:
+                  propertyName: scope
+                  mapping:
+                    scan: '#/components/schemas/ScanExplanationResponse'
+                    host: '#/components/schemas/MachineExplanationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - HTTPBearer: []
   /api/v1/ai/chat:
     post:
       tags:
@@ -8015,3 +8048,158 @@ components:
       properties:
         error:
           $ref: '#/components/schemas/ErrorBody'
+
+    AIExplainRequest:
+      properties:
+        scope:
+          type: string
+          enum:
+          - scan
+          - host
+          title: Scope
+        context_id:
+          type: string
+          format: uuid
+          title: Context Id
+        language:
+          type: string
+          enum:
+          - en
+          - pt-BR
+          - ru
+          title: Language
+          default: en
+      additionalProperties: false
+      type: object
+      required:
+      - scope
+      - context_id
+      title: AIExplainRequest
+    ExplanationPoint:
+      properties:
+        lead:
+          type: string
+          maxLength: 200
+          minLength: 3
+          title: Lead
+        text:
+          type: string
+          maxLength: 600
+          minLength: 3
+          title: Text
+      additionalProperties: false
+      type: object
+      required:
+      - lead
+      - text
+      title: ExplanationPoint
+    ScanExplanation:
+      properties:
+        in_short:
+          type: string
+          maxLength: 1000
+          minLength: 3
+          title: In Short
+        meanings:
+          items:
+            $ref: '#/components/schemas/ExplanationPoint'
+          type: array
+          maxItems: 4
+          title: Meanings
+        not_seen:
+          items:
+            type: string
+            maxLength: 600
+            minLength: 3
+          type: array
+          maxItems: 4
+          title: Not Seen
+      additionalProperties: false
+      type: object
+      required:
+      - in_short
+      - meanings
+      - not_seen
+      title: ScanExplanation
+    MachineExplanation:
+      properties:
+        what_it_is:
+          type: string
+          maxLength: 600
+          minLength: 3
+          title: What It Is
+        problems:
+          type: string
+          maxLength: 600
+          minLength: 3
+          title: Problems
+      additionalProperties: false
+      type: object
+      required:
+      - what_it_is
+      - problems
+      title: MachineExplanation
+    ScanExplanationResponse:
+      properties:
+        context_id:
+          type: string
+          format: uuid
+          title: Context Id
+        language:
+          type: string
+          enum:
+          - en
+          - pt-BR
+          - ru
+          title: Language
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        scope:
+          type: string
+          const: scan
+          title: Scope
+        explanation:
+          $ref: '#/components/schemas/ScanExplanation'
+      additionalProperties: false
+      type: object
+      required:
+      - context_id
+      - language
+      - created_at
+      - scope
+      - explanation
+      title: ScanExplanationResponse
+    MachineExplanationResponse:
+      properties:
+        context_id:
+          type: string
+          format: uuid
+          title: Context Id
+        language:
+          type: string
+          enum:
+          - en
+          - pt-BR
+          - ru
+          title: Language
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        scope:
+          type: string
+          const: host
+          title: Scope
+        explanation:
+          $ref: '#/components/schemas/MachineExplanation'
+      additionalProperties: false
+      type: object
+      required:
+      - context_id
+      - language
+      - created_at
+      - scope
+      - explanation
+      title: MachineExplanationResponse
