@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal, get_args
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from api.core.scan_mode import ScanMode
@@ -130,6 +130,7 @@ class Settings(BaseSettings):
         alias="AGENT_UPDATE_REFRESH_INTERVAL_SECONDS",
     )
     jwt_signing_secret: SecretStr = Field(alias="JWT_SIGNING_SECRET")
+    mcp_public_url: str = Field(default="", alias="MCP_PUBLIC_URL")
     access_token_ttl_minutes: int = Field(
         default=15, alias="ACCESS_TOKEN_TTL_MINUTES"
     )
@@ -194,6 +195,27 @@ class Settings(BaseSettings):
     @classmethod
     def _validate_database_url(cls, value: SecretStr) -> SecretStr:
         normalize_postgres_url(value.get_secret_value())
+        return value
+
+    @field_validator("mcp_public_url")
+    @classmethod
+    def _validate_mcp_public_url(cls, value: str) -> str:
+        from urllib.parse import urlsplit
+
+        if not value:
+            return value
+        value = str(AnyHttpUrl(value))
+        url = urlsplit(value)
+        local = url.hostname in {"localhost", "127.0.0.1", "::1"}
+        if (
+            not url.hostname or url.path != "/mcp" or url.query or url.fragment
+            or url.username or url.password
+            or (url.scheme != "https" and not (local and url.scheme == "http"))
+        ):
+            raise ValueError(
+                "MCP_PUBLIC_URL must be HTTPS and end in /mcp; "
+                "HTTP is allowed on loopback only"
+            )
         return value
 
     def command_max_duration_by_mode(self) -> dict[str, int]:

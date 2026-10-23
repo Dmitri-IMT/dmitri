@@ -513,6 +513,9 @@ function compareHosts(
 }
 
 export const handlers = [
+  http.get(`${baseURL}/mcp/info`, () =>
+    HttpResponse.json({ enabled: false, url: null }),
+  ),
   http.post(`${baseURL}/auth/login`, () =>
     HttpResponse.json(validLoginResponse),
   ),

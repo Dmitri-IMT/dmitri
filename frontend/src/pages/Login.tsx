@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/ui/password-input'
 import AuthShell from '@/components/AuthShell'
 import { useSession } from '@/auth/useSession'
+import { loginDestination } from '@/auth/loginDestination'
 import { SERVICE_ERROR } from '@/lib/copy'
 
 function Login() {
@@ -16,6 +17,7 @@ function Login() {
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const location = useLocation()
+  const destination = loginDestination(location.search)
   const navigate = useNavigate()
   const [arrival] = useState(() => {
     const state = location.state as {
@@ -37,7 +39,7 @@ function Login() {
   }, [arrival, status, location.pathname, navigate])
 
   if (status === 'authenticated') {
-    return <Navigate to="/" replace />
+    return <Navigate to={destination} replace />
   }
 
   if (status === 'booting') {

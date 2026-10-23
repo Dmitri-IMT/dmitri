@@ -53,6 +53,7 @@ FastAPI API plus CVE-enrichment worker. Full listing in [backend/index.md](./bac
 * [backend/api](./backend/api.md) — The FastAPI app (health, read, auth, user/invite admin, command-channel HTTP/WS, global errors), the worker entry, settings, and DB sessions.
 * [backend/routers](./backend/routers.md) — The FastAPI read, identity admin, device revoke/restore, scan/machine deletion, ingest and command-channel HTTP/WS routers with their auth gates.
 * [backend/auth](./backend/auth.md) — The wired user auth/session/password system, activity stamping, invite creation/lookup/list/revoke, role gates, and request-id/CORS middleware.
+* [backend/mcp](./backend/mcp.md) — Optional Streamable HTTP MCP with browser consent, persistent per-user OAuth connections and organization-scoped scan evidence reads.
 * [backend/device-auth](./backend/device-auth.md) — The per-device authentication gate — Ed25519 canonical-string signing, single-use nonce replay protection, and the transport-agnostic authenticate_agent core with its require_agent HTTP adapter.
 * [backend/management](./backend/management.md) — The two operator CLIs — backend-bootstrap-org (first org + its admin invite) and backend-provision-agent (register a device public key) — which print secrets to stdout and never to a log.
 * [backend/models](./backend/models.md) — The SQLModel tables for scan persistence and live progress, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
@@ -60,7 +61,7 @@ FastAPI API plus CVE-enrichment worker. Full listing in [backend/index.md](./bac
 * [backend/error-codes](./backend/error-codes.md) — The closed ScanErrorCode set and the two pure helpers every read path uses to normalise a stored command code onto the wire.
 * [backend/services](./backend/services.md) — Backend business logic for ingest, guarded live progress, reads, enrichment, command delivery and cancel, presence, idempotent device revoke/restore, and admin scan/machine deletion.
 * [backend/ai](./backend/ai.md) — OpenAI fix tasks, researched sources, cached explanations, web-assisted chat and usage metadata.
-* [backend/migrations](./backend/migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, live progress, and scan/machine deletion. Head is `20261024_48`.
+* [backend/migrations](./backend/migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, live progress, scan/machine deletion, and read-only MCP. Head is `20261024_49`.
 
 ## Frontend (auth, Home, Settings, user administration, and scan/host reads)
 
@@ -79,6 +80,7 @@ The React 19 + TypeScript SPA. Full listing in [frontend/index.md](./frontend/in
 * [frontend/agent-update-section](./frontend/agent-update-section.md) — DeviceDetail's localized update availability, readiness, version, operation-history and confirmed admin request section.
 * [frontend/agent-update-hook](./frontend/agent-update-hook.md) — Device update queries, active-operation polling, request idempotency, cache reconciliation and deduplicated read-error notifications.
 * [frontend/scan-ai](./frontend/scan-ai.md) — Fix-task list with language-specific caching, progress, checked sources and scanner fallback.
+* [frontend/MCP settings and browser consent](./frontend/mcp.md) — Compact MCP settings with a setup modal for Codex and Claude Code, copyable commands and prompts, and current-user connection controls.
 * [frontend/tables](./frontend/tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
 * [frontend/host-detail](./frontend/host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states, and the host's findings section owns its own.
 * [frontend/screens](./frontend/screens.md) — The public and guarded screens, scan-detail progress display, 70rem app frame, centred navigation, Settings with AI usage and admin data deletion, and shared presentation and interaction components.

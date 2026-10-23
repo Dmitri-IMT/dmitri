@@ -2311,6 +2311,220 @@ paths:
         '409':
           $ref: '#/components/responses/SelfTargetConflict'
 
+  /api/v1/mcp/info:
+    get:
+      tags:
+      - MCP
+      summary: Read Mcp Info
+      operationId: read_mcp_info_api_v1_mcp_info_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpInfo'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+      security:
+      - HTTPBearer: []
+  /api/v1/mcp/authorization:
+    get:
+      tags:
+      - MCP
+      summary: Read Mcp Authorization
+      operationId: read_mcp_authorization_api_v1_mcp_authorization_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: request_token
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 43
+          maxLength: 43
+          pattern: ^[A-Za-z0-9_-]+$
+          title: Request Token
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpAuthorizationView'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+          description: Unauthorized
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+          description: Conflict
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+          description: Unprocessable Entity
+    post:
+      tags:
+      - MCP
+      summary: Decide Mcp Authorization
+      operationId: decide_mcp_authorization_api_v1_mcp_authorization_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpConsentRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpConsentResponse'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+          description: Unauthorized
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+          description: Conflict
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+          description: Unprocessable Entity
+  /api/v1/mcp/connections:
+    get:
+      tags:
+      - MCP
+      summary: Read Mcp Connections
+      operationId: read_mcp_connections_api_v1_mcp_connections_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpConnectionList'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+      security:
+      - HTTPBearer: []
+  /api/v1/mcp/connections/{connection_id}:
+    delete:
+      tags:
+      - MCP
+      summary: Disconnect Mcp
+      operationId: disconnect_mcp_api_v1_mcp_connections__connection_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Connection Id
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+          description: Unauthorized
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+          description: Conflict
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpErrorResponse'
+          description: Unprocessable Entity
 components:
   securitySchemes:
     AgentSignatureAuth:
@@ -8414,3 +8628,139 @@ components:
       - data
       - has_more
       title: AIConversationsResponse
+    McpAuthorizationView:
+      properties:
+        client_name:
+          type: string
+          title: Client Name
+        redirect_uri:
+          type: string
+          title: Redirect Uri
+        organization:
+          type: string
+          title: Organization
+        email:
+          type: string
+          title: Email
+        scope:
+          type: string
+          const: dmitri:read
+          title: Scope
+          default: dmitri:read
+      type: object
+      required:
+      - client_name
+      - redirect_uri
+      - organization
+      - email
+      title: McpAuthorizationView
+    McpConnectionList:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/McpConnectionView'
+          type: array
+          title: Data
+      type: object
+      required:
+      - data
+      title: McpConnectionList
+    McpConnectionView:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        client_name:
+          type: string
+          title: Client Name
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+        last_used_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Used At
+      type: object
+      required:
+      - id
+      - client_name
+      - created_at
+      - expires_at
+      - last_used_at
+      title: McpConnectionView
+    McpConsentRequest:
+      properties:
+        request_token:
+          type: string
+          maxLength: 43
+          minLength: 43
+          pattern: ^[A-Za-z0-9_-]+$
+          title: Request Token
+        approve:
+          type: boolean
+          title: Approve
+      additionalProperties: false
+      type: object
+      required:
+      - request_token
+      - approve
+      title: McpConsentRequest
+    McpConsentResponse:
+      properties:
+        redirect_url:
+          type: string
+          title: Redirect Url
+      type: object
+      required:
+      - redirect_url
+      title: McpConsentResponse
+    McpErrorBody:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        details:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Details
+      type: object
+      required:
+      - code
+      - message
+      title: McpErrorBody
+    McpErrorResponse:
+      properties:
+        error:
+          $ref: '#/components/schemas/McpErrorBody'
+      type: object
+      required:
+      - error
+      title: McpErrorResponse
+    McpInfo:
+      properties:
+        enabled:
+          type: boolean
+          title: Enabled
+        url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Url
+      type: object
+      required:
+      - enabled
+      - url
+      title: McpInfo

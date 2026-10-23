@@ -3,7 +3,11 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 
 // `sm:` because the primitive's own cap is `sm:max-w-md`; an unprefixed width would lose
 // to it above 640px and every dialog would render at the same size.
-const WIDTH = { sm: 'sm:max-w-sm', md: 'sm:max-w-md' } as const
+const WIDTH = {
+  sm: 'sm:max-w-sm',
+  md: 'sm:max-w-md',
+  wide: 'sm:max-w-2xl max-h-assistant-dialog overflow-y-auto',
+} as const
 
 type DialogShellProps = {
   open: boolean
@@ -11,7 +15,7 @@ type DialogShellProps = {
   testId: string
   // Panel width. `sm` is for dialogs whose content is a short form and reads better
   // narrow and tall; `md` is the default for prose-led confirmations.
-  size?: 'sm' | 'md'
+  size?: 'sm' | 'md' | 'wide'
   // Blocks every dismissal — overlay click, Escape, Cancel — while an action is in flight.
   locked?: boolean
   // Focused on open instead of the first tabbable element.

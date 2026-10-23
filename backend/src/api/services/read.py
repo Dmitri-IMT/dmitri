@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from datetime import timedelta
+from datetime import datetime, timedelta
 from ipaddress import ip_address
 from uuid import UUID
 
@@ -361,12 +361,21 @@ def list_scans(
     agent_id: UUID | None = None,
     sort_by: ScanSortBy = "timestamp",
     sort_order: SortOrder = "desc",
+    scan_mode: str | None = None,
+    started_after: datetime | None = None,
+    started_before: datetime | None = None,
 ) -> ScanListResponse:
     predicates = [ScanRecord.org_id == org_id]
     if status is not None:
         predicates.append(ScanRecord.status == status)
     if agent_id is not None:
         predicates.append(ScanRecord.agent_id == agent_id)
+    if scan_mode is not None:
+        predicates.append(ScanRecord.scan_mode == scan_mode)
+    if started_after is not None:
+        predicates.append(ScanRecord.timestamp >= started_after)
+    if started_before is not None:
+        predicates.append(ScanRecord.timestamp <= started_before)
 
     total = session.exec(
         select(func.count()).select_from(ScanRecord).where(*predicates)

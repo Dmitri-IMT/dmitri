@@ -13,6 +13,9 @@ Com isso, cada finding pode expor `kev`, `epss` e um `risk_score` inicial explic
 O ingest tambem preserva os snapshots de sistema operacional e dos servicos industriais
 Modbus produzidos pelo `hardware-agent`.
 
+O MCP opcional oferece leitura dos mesmos resultados por Codex e Claude Code,
+com OAuth por usuario e isolamento por organizacao. Veja [MCP.md](MCP.md).
+
 ## Requisitos
 
 - Python 3.11+

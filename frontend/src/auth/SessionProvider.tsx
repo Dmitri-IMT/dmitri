@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import { acceptInvite, login, logout, refresh } from '@/api/auth'
 import { deleteCurrentUser, getCurrentUser } from '@/api/users'
 import { clearAccessToken, getAccessToken } from '@/api/tokenStore'
 import { onSessionExpired } from '@/api/authEvents'
+import { loginDestination } from '@/auth/loginDestination'
 import {
   SessionContext,
   type SessionContextValue,
@@ -26,6 +27,7 @@ async function bootSession(): Promise<UserProfileResponse> {
 export function SessionProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const location = useLocation()
   const [enabled, setEnabled] = useState(true)
 
   const query = useQuery({
@@ -60,15 +62,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [queryClient, navigate],
   )
 
-  async function enterSession(): Promise<void> {
+  async function enterSession(destination = '/'): Promise<void> {
     setEnabled(true)
     await queryClient.invalidateQueries({ queryKey: ['session'] })
-    navigate('/', { replace: true })
+    navigate(destination, { replace: true })
   }
 
   async function signIn(credentials: LoginRequest): Promise<void> {
+    const destination = loginDestination(location.search)
     await login(credentials)
-    await enterSession()
+    await enterSession(destination)
   }
 
   async function acceptInvitation(request: AcceptInviteRequest): Promise<void> {

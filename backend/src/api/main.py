@@ -36,6 +36,7 @@ from api.routers import (
     home,
     hosts,
     invites,
+    mcp,
     scans,
     users,
 )
@@ -44,6 +45,12 @@ from api.services.agent_presence import reconcile_all
 APP_VERSION = importlib.metadata.version("backend-api")
 
 settings = get_settings()
+mcp_server = None
+mcp_application = None
+if settings.mcp_public_url:
+    from api.mcp_server import create_mcp_server
+
+    mcp_server, mcp_application = create_mcp_server()
 
 
 @asynccontextmanager
@@ -52,7 +59,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # a fresh process: clear stale connected_at rows a previous crash left set.
     with Session(get_engine()) as session:
         reconcile_all(session)
-    yield
+    if mcp_server is None:
+        yield
+    else:
+        async with mcp_server.session_manager.run():
+            yield
 
 
 app = FastAPI(
@@ -170,3 +181,6 @@ app.include_router(findings.router)
 app.include_router(home.router)
 app.include_router(invites.router)
 app.include_router(ai.router)
+app.include_router(mcp.router)
+if mcp_application is not None:
+    app.mount("/", mcp_application)

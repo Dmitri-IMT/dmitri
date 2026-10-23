@@ -6,6 +6,13 @@ import type { ScanListParams } from './scans'
 export type { FindingListParams, HostListParams, ScanListParams }
 
 export const queryKeys = {
+  mcp: {
+    all: ['mcp'] as const,
+    info: () => ['mcp', 'info'] as const,
+    authorization: (requestToken: string) =>
+      ['mcp', 'authorization', requestToken] as const,
+    connections: (userId: string) => ['mcp', 'connections', userId] as const,
+  },
   home: {
     all: ['home'] as const,
     snapshot: (pages: HomePages) =>

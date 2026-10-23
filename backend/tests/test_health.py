@@ -54,6 +54,11 @@ EXPECTED_ROUTE_SURFACE = {
     ("/api/v1/findings", "GET"),
     ("/api/v1/findings/{finding_id}", "GET"),
     ("/api/v1/home", "GET"),
+    ("/api/v1/mcp/info", "GET"),
+    ("/api/v1/mcp/authorization", "GET"),
+    ("/api/v1/mcp/authorization", "POST"),
+    ("/api/v1/mcp/connections", "GET"),
+    ("/api/v1/mcp/connections/{connection_id}", "DELETE"),
 } | {
     (f"/api/v1/auth/{name}", method)
     for name in (

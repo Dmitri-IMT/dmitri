@@ -28,10 +28,11 @@ not a missing client or backend route.
 
 ## Auth
 
+* [Read-only MCP](./mcp.md) — Optional Streamable HTTP MCP with browser consent, persistent per-user OAuth connections and organization-scoped scan evidence reads.
 * [Backend auth — sessions, tokens, passwords, routes](./auth.md) — The wired user auth/session/password system, activity stamping, invite creation/lookup/list/revoke, role gates, and request-id/CORS middleware.
 * [Backend API error envelope](./errors.md) — ApiError with per-site code overrides and the global handlers that shape every HTTPException into the contract ErrorResponse.
 * [Backend device auth — Ed25519 signatures, nonces, the agent gate](./device-auth.md) — The per-device authentication gate — Ed25519 canonical-string signing, single-use nonce replay protection, and the transport-agnostic authenticate_agent core with its require_agent HTTP adapter.
 
 ## Migrations
 
-* [Backend database migrations](./migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, live progress, and scan/machine deletion. Head is `20261024_48`.
+* [Backend database migrations](./migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, live progress, scan/machine deletion, and read-only MCP. Head is `20261024_49`.
