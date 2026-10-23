@@ -24,7 +24,7 @@ not a missing client or backend route.
 
 * [Backend explained and technical scan reports](./reports.md) — Localized educational PDFs with clickable contents and page numbers, complete device inventories, evidence-aware explanations, charts, remediation checks and the full finding register.
 * [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — Backend business logic for ingest, guarded live progress, reads, enrichment, command delivery and cancel, presence, idempotent device revoke/restore, and admin scan/machine deletion.
-* [Backend AI — scan analysis, contextual chat, usage telemetry](./ai.md) — Groq scan overviews (on-demand or auto after enrichment), bounded structured repair and KEV coverage, scoped Q&A, and org usage metadata without storing prompts in `ai_usage`.
+* [Backend AI — OpenAI fix tasks, researched sources, cached explanations, web-assisted chat and usage metadata.
 
 ## Auth
 
@@ -34,4 +34,4 @@ not a missing client or backend route.
 
 ## Migrations
 
-* [Backend database migrations](./migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, live progress, and scan/machine deletion. Head is `20261012_40`.
+* [Backend database migrations](./migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, live progress, and scan/machine deletion. Head is `20261024_47`.

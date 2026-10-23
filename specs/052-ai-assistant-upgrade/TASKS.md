@@ -1,7 +1,7 @@
 # Tasks — R6 scan and machine redesign (`052-ai-assistant-upgrade`)
 
 Six implementation and verification tasks. Phases A and B are committed in `0e96c75` and `37d4e7f`.
-The owner authorized phases C–E in the pasted R6 plan. Tasks 1–5 are implemented; final verification is in progress.
+The owner authorized phases C–E in the pasted R6 plan. Tasks 1–5 are complete. Verification ran; the full backend gate has unrelated failures (see PROGRESS.md).
 
 ## Task 1: Build structured scan and machine explanations
 - **Description**: Complete phase C, including the existing uncommitted model/schema/migration work. Keep provider context anonymous, validate counts, share the chat daily limit, and cache by scope, context, language and prompt version. Refresh host caches when their latest scan changes. Absorbed: prompt files and usage metadata, verified through provider and route tests.
@@ -54,7 +54,7 @@ The owner authorized phases C–E in the pasted R6 plan. Tasks 1–5 are impleme
 - **Target Files**: `specs/052-ai-assistant-upgrade/TASKS.md`, `specs/052-ai-assistant-upgrade/PRD.md`, `.claude/docs/backend/ai.md`, `.claude/docs/frontend/screens.md`, `.claude/docs/frontend/scan-ai.md`, `.claude/docs/frontend/host-detail.md`, `.claude/docs/log.md`
 - **Tests**: `./database.sh --test`; backend `uv run ruff check src tests`; frontend lint, format:check, typecheck, test, build; clean type regeneration; live browser checks.
 - **Success Criteria**: Gates pass with live `dmitri_test`; phase commits contain scoped changes; documentation describes final behavior; live checks or exact blockers recorded.
-- **Status**: PENDING
+- **Status**: VERIFIED WITH LIMITATIONS
 - **Review Rejections**: 0
 
 ## Dependency graph
@@ -70,4 +70,4 @@ The owner authorized phases C–E in the pasted R6 plan. Tasks 1–5 are impleme
 | 3 | Hints and vulnerability view | COMPLETED |
 | 4 | Scan page | COMPLETED |
 | 5 | Machine page and assistant | COMPLETED |
-| 6 | Verification | PENDING |
+| 6 | Verification | VERIFIED WITH LIMITATIONS |

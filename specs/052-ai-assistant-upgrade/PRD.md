@@ -299,7 +299,15 @@ six places. Each place answers one question the user has:
      fix-record sources. Analyses stored before `AI_PROMPT_VERSION` 11 read as
      `not_requested` and can be made again. The scan overview card is now the to-do list
      card (DESIGN §15, all states); reports and the Home overview read the new shape.
-   - **C–E:** not built yet (explanation tasks, shared frontend parts, both pages).
+   - **C, built 2026-10-23:** cached structured scan/machine explanations via
+     `POST /api/v1/ai/explain`, count/reference checks, secret scrubbing, shared chat daily
+     limit and migration `20261024_47`. Host caches refresh after a newer scan.
+   - **D, built 2026-10-23:** click-open term/risk hints, right side panels, one vulnerability
+     view, risk-sorted expandable problems with evidence select, and counted IT sections.
+   - **E, built 2026-10-23:** scan story/to-do/meaning/problems composition, latest-scan
+     machine advice and problems, explanation panels and top-bar assistant. Machine labels
+     in the problems table cap at 24 characters including `...`, with full hover text.
+     Verification and remaining external limits: [`PROGRESS.md`](PROGRESS.md).
 
 ## Success check
 

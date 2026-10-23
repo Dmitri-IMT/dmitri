@@ -8,21 +8,20 @@ import Disclosure from '@/components/Disclosure'
 import LoadingSkeleton from '@/components/LoadingSkeleton'
 import PageHeader from '@/components/PageHeader'
 import ReadDetailGate from '@/components/ReadDetailGate'
+import ProblemsTable from '@/components/ProblemsTable'
+import ItSections from '@/components/ItSections'
+import { ObservationList } from '@/components/EvidenceDetails'
 import { Card, CardContent } from '@/components/ui/card'
 import { readDetailState } from '@/lib/detailState'
 import { isUnfinished } from '@/lib/scanStatus'
+import { coverageCounts } from '@/lib/scanCoverage'
 import ExposureTable from '@/pages/scans/ExposureTable'
-import FindingsTable from '@/pages/scans/FindingsTable'
-import FindingEvidenceFilter, {
-  type EvidenceFilter,
-} from '@/pages/scans/FindingEvidenceFilter'
-import { ObservationList } from '@/pages/scans/FindingPanel'
 import TodoList from '@/pages/scans/TodoList'
+import StoryStrip from '@/pages/scans/StoryStrip'
+import MeaningTable from '@/pages/scans/MeaningTable'
 import ScanCoverage from '@/pages/scans/ScanCoverage'
 import ScanDelete from '@/pages/scans/ScanDelete'
-import ScanDetailHeader, {
-  ScanSummaryStrip,
-} from '@/pages/scans/ScanDetailHeader'
+import ScanDetailHeader from '@/pages/scans/ScanDetailHeader'
 import ScanFailedNotice from '@/pages/scans/ScanFailedNotice'
 import ScanHostsTable from '@/pages/scans/ScanHostsTable'
 import ScanIndustrialServices from '@/pages/scans/ScanIndustrialServices'
@@ -41,8 +40,6 @@ function ScanDetail() {
     searchParams.get('finding'),
   )
   const [openExposureId, setOpenExposureId] = useState<string | null>(null)
-  const [evidenceFilter, setEvidenceFilter] = useState<EvidenceFilter>('all')
-
   const query = useQuery({
     queryKey: queryKeys.scans.detail(scanId),
     queryFn: () => getScan(scanId),
@@ -53,33 +50,19 @@ function ScanDetail() {
     },
     refetchIntervalInBackground: true,
   })
-
-  if (query.isPending) {
+  if (query.isPending)
     return (
-      <div data-testid="scan-detail" className="flex flex-col gap-12">
+      <div data-testid="scan-detail" className="flex flex-col gap-8">
         <PageHeader title="Scan" />
-        <div className="flex flex-col gap-8" aria-label="Loading scan">
-          <table
-            className="w-full table-fixed"
-            aria-label="Loading scan summary"
-          >
-            <LoadingSkeleton rows={1} columns={6} />
-          </table>
-          <Card>
-            <CardContent>
-              <table
-                className="w-full table-fixed"
-                aria-label="Loading scan data"
-              >
-                <LoadingSkeleton rows={3} columns={5} />
-              </table>
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardContent>
+            <table className="w-full" aria-label="Loading scan">
+              <LoadingSkeleton rows={3} columns={5} />
+            </table>
+          </CardContent>
+        </Card>
       </div>
     )
-  }
-
   return (
     <ReadDetailGate
       testId="scan-detail"
@@ -91,30 +74,28 @@ function ScanDetail() {
       detail={readDetailState(scanId, query)}
     >
       {(scan) => {
+        const view = scanDetailView(scan)
         const severityFindings = scan.findings.filter(
           (finding) => !isTargetedFinding(finding),
         )
-        const visibleFindings = severityFindings.filter(
-          (finding) =>
-            evidenceFilter === 'all' ||
-            finding.demonstrated === (evidenceFilter === 'confirmed'),
-        )
-        const observations = scan.finding_observations ?? []
-        const view = scanDetailView(scan)
-        const metadata = scan.metadata ?? {}
-        const opensTargetedDeepLink = scan.findings.some(
+        const opensTargeted = scan.findings.some(
           (finding) =>
             isTargetedFinding(finding) && finding.finding_id === openFindingId,
         )
-        const omittedUnlisted =
+        const counts = coverageCounts(scan)
+        const observations = scan.finding_observations ?? []
+        const metadata = scan.metadata ?? {}
+        const omitted =
           typeof metadata.targeted_units_omitted_unlisted === 'number'
             ? metadata.targeted_units_omitted_unlisted
             : 0
-
+        const industrialCount = scan.hosts.reduce(
+          (n, host) => n + host.industrial_services.length,
+          0,
+        )
         return (
           <>
             <ScanDetailHeader scan={scan} />
-            <ScanSummaryStrip scan={scan} />
             {view.failed && <ScanFailedNotice errorCode={scan.error_code} />}
             {view.body === 'stopped' && <ScanStoppedNotice variant="empty" />}
             {view.body === 'progress' && (
@@ -133,167 +114,140 @@ function ScanDetail() {
               >
                 {view.stoppedEarly && <ScanStoppedNotice variant="partial" />}
                 {view.failed && (
-                  <p className="text-body-md text-muted-foreground">
+                  <p className="text-body-md text-ink-muted">
                     {t('scans.failedEvidence')}
                   </p>
                 )}
+                <StoryStrip scan={scan} />
                 {view.sections.aiAnalysis && (
                   <TodoList scanId={scan.scan_id} findings={scan.findings} />
                 )}
-                {view.sections.noFindings && (
-                  <p data-testid="scan-no-findings" className="text-body-md">
-                    {view.completeness === 'complete'
-                      ? t('common.noVulnerabilitiesInScan')
-                      : t('common.noVulnerabilitiesAcceptedEvidence')}
-                  </p>
-                )}
-                {severityFindings.length > 0 && (
-                  <ScanDetailSection
-                    title={t('common.vulnerabilitiesInScanTitle', {
-                      count: severityFindings.length,
-                    })}
-                    openToken={
-                      severityFindings.some(
-                        (finding) => finding.finding_id === openFindingId,
-                      )
-                        ? (openFindingId ?? undefined)
-                        : undefined
-                    }
-                    triggerAriaLabel={t('common.vulnerabilitiesInScanToggle')}
-                  >
-                    <div className="flex flex-col gap-6">
-                      <FindingEvidenceFilter
-                        findings={severityFindings}
-                        value={evidenceFilter}
-                        onChange={setEvidenceFilter}
-                      />
-                      <FindingsTable
-                        findings={visibleFindings}
-                        variant="scan"
-                        testId="findings"
-                        caption={t('common.vulnerabilitiesInScanCaption')}
+                <MeaningTable scan={scan} />
+                <ProblemsTable
+                  findings={severityFindings}
+                  openFindingId={openFindingId}
+                  onOpenFindingChange={setOpenFindingId}
+                />
+                <ItSections>
+                  {view.sections.attackSurface && (
+                    <ScanDetailSection
+                      testId="it-section-ports"
+                      title={t('it.ports', {
+                        n: scan.exposures.length,
+                        m: new Set(scan.exposures.map((item) => item.host_id))
+                          .size,
+                      })}
+                    >
+                      {scan.assessment_status === 'unavailable' ? (
+                        <div
+                          data-testid="scan-assessment-unavailable"
+                          className="flex flex-col gap-2 text-body-md"
+                        >
+                          <p>{t('common.attackSurfaceUnavailable')}</p>
+                          <p className="text-ink-muted">
+                            {t('common.rerunForData')}
+                          </p>
+                        </div>
+                      ) : scan.exposures.length === 0 ? (
+                        <p
+                          data-testid="scan-no-exposures"
+                          className="text-body-md"
+                        >
+                          {t('common.noReachableServices')}
+                        </p>
+                      ) : (
+                        <ExposureTable
+                          exposures={scan.exposures}
+                          findings={scan.findings}
+                          testId="scan-exposures-table"
+                          openExposureId={openExposureId}
+                          onOpenExposureChange={setOpenExposureId}
+                          onOpenFinding={(id) => {
+                            flushSync(() => setOpenFindingId(id))
+                            const finding = scan.findings.find(
+                              (item) => item.finding_id === id,
+                            )
+                            const table =
+                              finding && isTargetedFinding(finding)
+                                ? `targeted-${finding.severity}`
+                                : 'problems-table'
+                            document
+                              .querySelector<HTMLButtonElement>(
+                                `[data-testid="${table}-caret-${id}"]`,
+                              )
+                              ?.focus()
+                          }}
+                        />
+                      )}
+                    </ScanDetailSection>
+                  )}
+                  {view.sections.machines && (
+                    <ScanDetailSection
+                      testId="it-section-machines"
+                      title={t('it.machines', { n: scan.hosts.length })}
+                    >
+                      <ScanHostsTable hosts={scan.hosts} />
+                    </ScanDetailSection>
+                  )}
+                  {view.sections.targeted && (
+                    <ScanDetailSection
+                      testId="it-section-targeted"
+                      title={t('it.targeted', {
+                        n: scan.findings.filter(isTargetedFinding).length,
+                      })}
+                      openToken={
+                        opensTargeted ? (openFindingId ?? undefined) : undefined
+                      }
+                      triggerAriaLabel={t('scans.targetedFindingsToggle')}
+                    >
+                      <ServiceTargetedFindings
+                        findings={scan.findings}
                         openFindingId={openFindingId}
                         onOpenFindingChange={setOpenFindingId}
-                        empty={t(`evidence.filter.empty.${evidenceFilter}`)}
                       />
-                    </div>
-                  </ScanDetailSection>
-                )}
-                {view.sections.targeted && (
-                  <ScanDetailSection
-                    key="targeted"
-                    title={t('scans.targetedFindingsTitle', {
-                      count: scan.findings.filter(isTargetedFinding).length,
-                    })}
-                    openToken={
-                      opensTargetedDeepLink
-                        ? (openFindingId ?? undefined)
-                        : undefined
-                    }
-                    triggerAriaLabel={t('scans.targetedFindingsToggle')}
-                  >
-                    <ServiceTargetedFindings
-                      findings={scan.findings}
-                      openFindingId={openFindingId}
-                      onOpenFindingChange={setOpenFindingId}
-                    />
-                  </ScanDetailSection>
-                )}
-                {view.sections.attackSurface && (
-                  <ScanDetailSection title={t('common.attackSurface')}>
-                    {scan.assessment_status === 'unavailable' ? (
-                      <div
-                        data-testid="scan-assessment-unavailable"
-                        className="flex flex-col gap-2 text-body-md"
-                      >
-                        <p>{t('common.attackSurfaceUnavailable')}</p>
-                        <p className="text-muted-foreground">
-                          {t('common.rerunForData')}
-                        </p>
+                    </ScanDetailSection>
+                  )}
+                  {view.sections.coverage && (
+                    <ScanDetailSection
+                      testId="it-section-coverage"
+                      title={t('it.coverage', counts)}
+                    >
+                      <div className="flex flex-col gap-6">
+                        {(observations.length > 0 ||
+                          scan.finding_observations_truncated) && (
+                          <Disclosure
+                            label={t('evidence.otherChecks', {
+                              count: observations.length,
+                            })}
+                            testId="scan-other-checks"
+                            caretTestId="scan-other-checks-caret"
+                          >
+                            <div className="w-full pt-4">
+                              <ObservationList
+                                observations={observations}
+                                truncated={scan.finding_observations_truncated}
+                                testId="scan-finding-observations"
+                                title={t('evidence.observationsTitle')}
+                              />
+                            </div>
+                          </Disclosure>
+                        )}
+                        <ScanCoverage
+                          coverage={scan.coverage ?? []}
+                          omittedUnlisted={omitted}
+                        />
                       </div>
-                    ) : scan.exposures.length === 0 ? (
-                      <p
-                        data-testid="scan-no-exposures"
-                        className="text-body-md"
-                      >
-                        {t('common.noReachableServices')}
-                      </p>
-                    ) : (
-                      <ExposureTable
-                        exposures={scan.exposures}
-                        findings={scan.findings}
-                        testId="scan-exposures-table"
-                        openExposureId={openExposureId}
-                        onOpenExposureChange={setOpenExposureId}
-                        onOpenFinding={(id) => {
-                          const finding = scan.findings.find(
-                            (item) => item.finding_id === id,
-                          )
-                          flushSync(() => {
-                            setEvidenceFilter('all')
-                            setOpenFindingId(id)
-                          })
-                          if (finding == null) {
-                            return
-                          }
-                          const table = isTargetedFinding(finding)
-                            ? `targeted-${finding.severity}`
-                            : 'findings'
-                          document
-                            .querySelector<HTMLButtonElement>(
-                              `[data-testid="${table}-caret-${id}"]`,
-                            )
-                            ?.focus()
-                        }}
-                      />
-                    )}
-                  </ScanDetailSection>
-                )}
-                {view.sections.industrial && (
-                  <ScanDetailSection title={t('common.industrialServices')}>
-                    <ScanIndustrialServices hosts={scan.hosts} />
-                  </ScanDetailSection>
-                )}
-                {view.sections.machines && (
-                  <ScanDetailSection title={t('common.machinesSeen')}>
-                    {scan.hosts.length === 0 ? (
-                      <p className="text-body-md">
-                        No machines were discovered.
-                      </p>
-                    ) : (
-                      <ScanHostsTable hosts={scan.hosts} />
-                    )}
-                  </ScanDetailSection>
-                )}
-                {view.sections.coverage && (
-                  <ScanDetailSection title={t('scans.checkCoverage')}>
-                    <div className="flex flex-col gap-6">
-                      {(observations.length > 0 ||
-                        scan.finding_observations_truncated) && (
-                        <Disclosure
-                          label={t('evidence.otherChecks', {
-                            count: observations.length,
-                          })}
-                          testId="scan-other-checks"
-                          caretTestId="scan-other-checks-caret"
-                        >
-                          <div className="w-full pt-4">
-                            <ObservationList
-                              observations={observations}
-                              truncated={scan.finding_observations_truncated}
-                              testId="scan-finding-observations"
-                              title={t('evidence.observationsTitle')}
-                            />
-                          </div>
-                        </Disclosure>
-                      )}
-                      <ScanCoverage
-                        coverage={scan.coverage ?? []}
-                        omittedUnlisted={omittedUnlisted}
-                      />
-                    </div>
-                  </ScanDetailSection>
-                )}
+                    </ScanDetailSection>
+                  )}
+                  {view.sections.industrial && (
+                    <ScanDetailSection
+                      testId="it-section-industrial"
+                      title={`${t('common.industrialServices')} · ${industrialCount}`}
+                    >
+                      <ScanIndustrialServices hosts={scan.hosts} />
+                    </ScanDetailSection>
+                  )}
+                </ItSections>
               </div>
             )}
             <ScanDelete scan={scan} />
@@ -303,5 +257,4 @@ function ScanDetail() {
     </ReadDetailGate>
   )
 }
-
 export default ScanDetail

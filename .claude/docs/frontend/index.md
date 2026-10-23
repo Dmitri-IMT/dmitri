@@ -41,10 +41,12 @@ table. App source lives at `frontend/src/`; the local lint plugin lives at `fron
 * [agent-update-section](./agent-update-section.md) — DeviceDetail's localized update availability, readiness, version, operation-history and confirmed admin request section.
 * [agent-update-hook](./agent-update-hook.md) — Device update queries, active-operation polling, request idempotency, cache reconciliation and deduplicated read-error notifications.
 * [scan-partial-warning](./scan-partial-warning.md) — ScanPartialWarning shows a plain attention line beside scan duration when a scan is partial.
-* [scan-ai](./scan-ai.md) — Scan Detail card that GETs analysis status in the UI language, offers Explain this scan once per language, polls only while pending or processing, and renders the Groq overview in collapsible sections when completed.
-* [context-ai](./context-ai.md) — One-shot "Explain with AI" (finding, host) via ContextChat's presetQuestion mode against `/ai/chat`, askable once per mount. GlobalAssistant (the floating multi-turn assistant) was deleted.
+* [scan-ai](./scan-ai.md) — Fix-task list with language-specific caching, progress, checked sources and scanner fallback.
+* [context-ai](./context-ai.md) — Structured explanation side panels and top-bar contextual chat.
 * [home-ai-overview](./home-ai-overview.md) — Home teaser for the latest successful scan's analysis status.
 * [ai-usage](./ai-usage.md) — Settings panel for org-wide provider usage totals and recent operations.
 * [tables](./tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
 * [host-detail](./host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states with back links, and each independent second read owns its own section states.
 * [screens](./screens.md) — The public and guarded screens, scan-detail progress display, 70rem app frame, centred navigation, Settings with AI usage and admin data deletion, and shared presentation and interaction components.
+
+* [Result components](./nonexpert-results.md) — Story, meaning, expandable problems, term/risk hints and shared vulnerability states.

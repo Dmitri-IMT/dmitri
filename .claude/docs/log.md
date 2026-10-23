@@ -3,6 +3,16 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-23
+
+* **Update**: R6 scan and machine composition: story, to-do, meaning, shared risk-sorted
+  problems and counted IT disclosures. Replaced both finding panels and inline finding chats.
+* **Creation**: Result-component map covering term/risk hints, vulnerability states and
+  latest-scan machine task selection. Machine labels cap at 24 characters with full hover text.
+* **Update**: AI map, API references, models and migration head for structured cached scan/host
+  explanations, count/reference validation and the shared chat/explanation daily limit.
+* **Update**: Context assistant now opens in the top bar and from explanation panels.
+
 ## 2026-10-20
 
 * **Creation**: Added the frontend device update section/hook code-map docs for localized

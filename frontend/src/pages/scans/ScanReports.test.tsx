@@ -79,12 +79,12 @@ describe('ScanReports', () => {
     })
   })
 
-  it('renders a single borderless icon button, not a card or full-width row', () => {
+  it('renders the outline download menu in the page header', () => {
     renderWithProviders(<ScanReports scanId="scan-1" />)
 
-    const trigger = screen.getByRole('button', { name: 'Scan reports' })
+    const trigger = screen.getByRole('button', { name: 'Download report' })
     expect(trigger).toBeInTheDocument()
-    expect(trigger).toHaveAttribute('data-variant', 'ghost')
+    expect(trigger).toHaveAttribute('data-variant', 'outline')
     expect(screen.getByTestId('scan-reports')).not.toHaveClass('border-border')
   })
 
@@ -92,7 +92,7 @@ describe('ScanReports', () => {
     const user = userEvent.setup()
     renderWithProviders(<ScanReports scanId="scan-1" />)
 
-    await user.click(screen.getByRole('button', { name: 'Scan reports' }))
+    await user.click(screen.getByRole('button', { name: 'Download report' }))
     await user.click(
       await screen.findByRole('menuitem', {
         name: 'Download explained report',
@@ -119,7 +119,7 @@ describe('ScanReports', () => {
       })
     renderWithProviders(<ScanReports scanId="scan-1" />)
 
-    await user.click(screen.getByRole('button', { name: 'Scan reports' }))
+    await user.click(screen.getByRole('button', { name: 'Download report' }))
     await user.click(
       await screen.findByRole('menuitem', {
         name: 'Download technical report',
@@ -147,7 +147,7 @@ describe('ScanReports', () => {
     const user = userEvent.setup()
     renderWithProviders(<ScanReports scanId="scan-1" />)
 
-    await user.click(screen.getByRole('button', { name: 'Scan reports' }))
+    await user.click(screen.getByRole('button', { name: 'Download report' }))
     await user.click(
       await screen.findByRole('menuitem', {
         name: 'Download explained report',

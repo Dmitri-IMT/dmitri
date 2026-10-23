@@ -90,12 +90,11 @@ function ScanReports({ scanId }: { scanId: string }) {
         <DropdownMenuTrigger asChild>
           <Button
             type="button"
-            variant="ghost"
-            size="sm"
-            className="gap-2 text-primary hover:text-primary"
+            variant="outline"
+            className="gap-2"
             disabled={busy}
           >
-            {t('reports.title')}
+            {t('scan.download')}
             <Download aria-hidden="true" data-icon="inline-end" />
           </Button>
         </DropdownMenuTrigger>

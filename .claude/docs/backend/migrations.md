@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, live progress, and scan/machine deletion. Head is `20261017_41`.
+description: The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, live progress, and scan/machine deletion. Head is `20261024_47`.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-10-14T00:00:00Z
+timestamp: 2026-10-23T00:00:00Z
 ---
 
 # Backend database migrations
@@ -37,7 +37,11 @@ adds `scans.coverage_json` and downgrades historical NVD/vulners CVE confidence 
 `20261012_40` adds `deleted_scans` and the grants admin deletion needs.
 `20261010_40` adds finding and scan evidence policy metadata.
 `20261017_41` merges evidence and deletion without changing their deployed revision IDs.
-Head is `20261017_41`.
+Head is `20261024_47`.
+
+`20261023_44` adds cached-input and reasoning tokens to AI usage; `20261023_45`
+adds researched fix records; `20261023_46` adds scan-analysis progress;
+`20261024_47` adds cached explanations with RLS, runtime grants and a cascading scan FK.
 
 ## Key classes / functions
 
