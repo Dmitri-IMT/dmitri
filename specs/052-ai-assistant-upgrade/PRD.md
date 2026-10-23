@@ -258,7 +258,10 @@ six places. Each place answers one question the user has:
    `voice.md`, `scan.md`, `chunk.md`, `synthesis.md`, `repair.md`, `chat.md`;
    `AI_PROMPT_VERSION` 8, `WRITING_SKILL_VERSION` 2). The CVE research file comes with R3,
    which adds its caller and schema. Chat stays plain text until R5 renders lists.
-4. R3 — CVE research step and cache (updates DMI-169).
+4. R3 — CVE research step and cache. **Built 2026-10-23** (`services/ai/research.py`,
+   `instructions/research.md`, table `ai_fix_records` in migration `20261023_45`,
+   `AI_PROMPT_VERSION` 9, `AI_CONTEXT_VERSION` 6). Research runs inside the analysis job,
+   up to 5 calls in parallel. The AI job stale window is now `AI_TIMEOUT_SECONDS × 10`.
 5. R4 + R5 + waiting state — chat search, source links, loader.
 6. R6 entry point — separate issue.
 

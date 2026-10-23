@@ -171,6 +171,32 @@ class ProviderScanAIChildAnalysis(BaseModel):
     uncertainties: Annotated[list[AIShortText], Field(max_length=20)]
 
 
+FixEffort = Literal["setting_change", "update", "workaround", "replace", "ask_vendor"]
+FixActor = Literal["owner", "it_person", "vendor"]
+
+
+class ProviderFixOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    effort: FixEffort
+    who: FixActor
+    steps: Annotated[
+        list[Annotated[str, Field(min_length=3, max_length=600)]],
+        Field(min_length=1, max_length=3),
+    ]
+    fixed_version: Annotated[str, Field(max_length=200)] | None
+    fixes_fully: bool
+    source_name: Annotated[str, Field(min_length=2, max_length=200)]
+    source_url: Annotated[str, Field(min_length=8, max_length=2000)]
+
+
+class ProviderCVEFixResearch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version_affected: Literal["yes", "no", "unknown"]
+    options: Annotated[list[ProviderFixOption], Field(max_length=3)]
+
+
 class ScanAIAnalysisUnavailable(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -20,6 +20,8 @@ from api.models.persistence import (
 from api.schemas.ai import (
     AIFindingExplanation,
     AIRecommendedAction,
+    FixActor,
+    FixEffort,
     ProviderScanAIAnalysis,
     ScanAIAnalysis,
 )
@@ -41,10 +43,35 @@ from api.services.scan_evidence import (
     parse_coverage,
 )
 
-AI_CONTEXT_VERSION = "5"
+AI_CONTEXT_VERSION = "6"
 
 MAX_AI_FINDINGS = 15
 _REFERENCE_PATTERN = re.compile(r"\b(?:finding|machine)_[1-9][0-9]*\b")
+
+
+class AIFixOptionContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    effort: FixEffort
+    who: FixActor
+    steps: list[str]
+    fixed_version: str | None
+    fixes_fully: bool
+    source_name: str
+
+
+class FixResearchTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cve_id: str
+    product: str | None
+    version: str | None
+    service: str | None
+    severity: Severity
+    cvss_score: float | None
+    is_kev: bool
+    kev_required_action: str | None
+    epss_score: float | None
 
 
 class AIFindingContext(BaseModel):
@@ -78,12 +105,14 @@ class AIFindingContext(BaseModel):
     epss_percentile: Annotated[float | None, Field(ge=0, le=1)]
     is_kev: bool
     known_ransomware: bool
+    version_affected: Literal["yes", "no", "unknown"] | None = None
+    fix_options: list[AIFixOptionContext] = Field(default_factory=list)
 
 
 class ScanAIContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["5"] = AI_CONTEXT_VERSION
+    context_version: Literal["6"] = AI_CONTEXT_VERSION
     scan_mode: ScanMode
     evidence_completeness: EvidenceCompleteness = "unknown"
     incomplete_check_count: Annotated[int, Field(ge=0)] = 0
@@ -128,7 +157,7 @@ class MachineVulnerabilityCount(BaseModel):
 class ScanChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["5"] = AI_CONTEXT_VERSION
+    context_version: Literal["6"] = AI_CONTEXT_VERSION
     scope: Literal["scan"] = "scan"
     scan_mode: ScanMode
     status: ScanStatus
@@ -144,7 +173,7 @@ class ScanChatContext(BaseModel):
 class FindingChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["5"] = AI_CONTEXT_VERSION
+    context_version: Literal["6"] = AI_CONTEXT_VERSION
     scope: Literal["finding"] = "finding"
     finding: AIFindingContext
     evidence_summary: FindingEvidenceSummary
@@ -153,7 +182,7 @@ class FindingChatContext(BaseModel):
 class HostChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["5"] = AI_CONTEXT_VERSION
+    context_version: Literal["6"] = AI_CONTEXT_VERSION
     scope: Literal["host"] = "host"
     machine_ref: Annotated[str, Field(pattern=r"^machine_[1-9][0-9]*$")]
     machine_type: MachineType

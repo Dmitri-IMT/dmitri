@@ -39,6 +39,8 @@ from api.services.ai.openai_responses import (
     AIProviderError,
     OpenAIResponsesProvider,
 )
+from api.services.ai.providers import supports_fix_research
+from api.services.ai.research import attach_fix_records
 from api.services.ai.telemetry import drain_provider_usage, persist_usage_events
 from api.services.ai.validation import (
     AIAnalysisValidationError,
@@ -344,6 +346,11 @@ def _process_claimed_analysis(
         provider_analysis = None
         coverage = AnalysisCoverage(0, 0, 0)
         if context is not None:
+            if supports_fix_research(provider):
+                phase = "fix_research"
+                attach_fix_records(
+                    session, context, provider, settings=get_settings(), now=now
+                )
             phase = "provider_analysis"
             provider_analysis, coverage = run_bounded_analysis(
                 provider, context, language=record.language

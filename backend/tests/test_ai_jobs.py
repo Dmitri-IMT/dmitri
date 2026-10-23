@@ -9,6 +9,8 @@ from api.models.persistence import AIScanAnalysisRecord, EnrichmentJobRecord, Ke
 from api.schemas.ai import (
     AIProviderFindingExplanation,
     AIProviderRecommendedAction,
+    ProviderCVEFixResearch,
+    ProviderFixOption,
     ProviderScanAIAnalysis,
     ProviderScanAIChildAnalysis,
 )
@@ -724,3 +726,45 @@ def test_run_ai_worker_loop_skips_provider_when_ai_unavailable(monkeypatch):
 
     worker_module.run_ai_worker_loop()
     assert poll_calls == []
+
+
+def test_job_researches_fixes_before_analysis(administrative_session):
+    scan, finding = _scan_with_finding(administrative_session)
+    finding.cve_id = "CVE-2026-0001"
+    administrative_session.add(finding)
+    administrative_session.commit()
+    _pending_analysis(administrative_session, scan)
+    seen = []
+
+    class ResearchingProvider:
+        def research_fix(self, target):
+            return (
+                ProviderCVEFixResearch(
+                    version_affected="yes",
+                    options=[
+                        ProviderFixOption(
+                            effort="update",
+                            who="it_person",
+                            steps=["Install the vendor update."],
+                            fixed_version="2.0",
+                            fixes_fully=True,
+                            source_name="Vendor advisory",
+                            source_url="https://vendor.example.com/advisory",
+                        )
+                    ],
+                ),
+                {"https://vendor.example.com/advisory"},
+            )
+
+        def analyze_scan(self, context, language="en"):
+            seen.append(context.top_findings[0].fix_options)
+            return _grounded_analysis()
+
+        def repair_analysis(self, context, violation_codes, language="en"):
+            return _grounded_analysis()
+
+    _run(administrative_session, ResearchingProvider(), now=datetime.now(timezone.utc))
+
+    record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
+    assert record.status == "completed"
+    assert [option.source_name for option in seen[0]] == ["Vendor advisory"]

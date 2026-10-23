@@ -441,6 +441,23 @@ class RiskSnapshotRecord(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
+class AIFixRecord(SQLModel, table=True):
+    __tablename__ = "ai_fix_records"
+
+    id: int | None = Field(default=None, primary_key=True)
+    cache_key: str = Field(unique=True, index=True)
+    cve_id: str = Field(index=True)
+    product: str
+    version: str
+    research_version: str
+    record_json: dict[str, Any] = Field(sa_column=Column(JSON))
+    has_fix: bool
+    kev_fingerprint: str
+    nvd_last_modified: str | None = None
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    expires_at: datetime = Field(index=True, sa_type=UTC_TIMESTAMP)
+
+
 class AIScanAnalysisRecord(SQLModel, table=True):
     __tablename__ = "ai_scan_analyses"
     __table_args__ = (

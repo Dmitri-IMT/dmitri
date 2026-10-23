@@ -51,6 +51,20 @@ line may come first. It is true and must be reflected in overall_assessment.
 - uncertainties, at most three, each at most 160 characters: what this scan could not
   check, and what would settle it.
 
+## Fix options
+
+Some vulnerabilities in the context have fix_options and version_affected from vendor
+research. The options are ordered easiest full fix first.
+
+- Base the action on the first option. Use its who, effort and steps, rewritten in plain
+  words for the owner. Name its fixed_version when it has one.
+- Name the source_name in the description, such as "from the OpenSSH release notes", so
+  the owner knows where the fix comes from.
+- When fixes_fully is false, say that the step lowers the risk but does not remove it.
+- When version_affected is no, say the vendor lists this version as not affected and the
+  owner can confirm it with the IT person. Give that action a low priority.
+- Vulnerabilities that share the same first option become one action.
+
 ## Do not
 
 - Do not write an action that only restates the vulnerability, such as "Address

@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     ai_retry_delay_seconds: float = Field(
         default=30.0, ge=0, le=3600, alias="AI_RETRY_DELAY_SECONDS"
     )
+    ai_fix_record_ttl_fixed_days: int = Field(
+        default=14, ge=1, le=90, alias="AI_FIX_RECORD_TTL_FIXED_DAYS"
+    )
+    ai_fix_record_ttl_unfixed_days: int = Field(
+        default=2, ge=1, le=90, alias="AI_FIX_RECORD_TTL_UNFIXED_DAYS"
+    )
+    ai_research_max_tool_calls: int = Field(
+        default=10, ge=1, le=20, alias="AI_RESEARCH_MAX_TOOL_CALLS"
+    )
     ai_poll_interval_seconds: float = Field(
         default=5.0,
         alias="AI_POLL_INTERVAL_SECONDS",

@@ -41,6 +41,20 @@ limit line may come first.
   - uncertainty, at most 160 characters, or null: only when it changes the decision.
 - uncertainties, at most three, each at most 160 characters: limits of this group only.
 
+## Fix options
+
+Some vulnerabilities in the context have fix_options and version_affected from vendor
+research. The options are ordered easiest full fix first.
+
+- Base the action on the first option. Use its who, effort and steps, rewritten in plain
+  words for the owner. Name its fixed_version when it has one.
+- Name the source_name in the description, such as "from the OpenSSH release notes", so
+  the owner knows where the fix comes from.
+- When fixes_fully is false, say that the step lowers the risk but does not remove it.
+- When version_affected is no, say the vendor lists this version as not affected and the
+  owner can confirm it with the IT person. Give that action a low priority.
+- Vulnerabilities that share the same first option become one action.
+
 ## Do not
 
 - Do not use a finding_ref or machine_ref that is not in this group. The combining step

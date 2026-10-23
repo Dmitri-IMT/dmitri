@@ -73,7 +73,7 @@ def test_context_uses_ranked_bounded_enriched_findings(
     )
 
     assert context is not None
-    assert context.context_version == "5"
+    assert context.context_version == "6"
     assert context.host_count == 2
     assert context.total_findings == 2
     assert context.scored_findings == 2
@@ -117,7 +117,7 @@ def test_context_maps_partial_scan_termination(
     context = build_scan_ai_context(administrative_session, seeded["scan"])
 
     assert context is not None
-    assert context.context_version == "5"
+    assert context.context_version == "6"
     assert context.evidence_completeness == "partial"
     assert context.stopped_by == stopped_by
 
@@ -343,7 +343,7 @@ def test_split_context_keeps_full_evidence_summary(administrative_session):
         "finding_1", "finding_2"
     ]
     assert all(chunk.evidence_summary == context.evidence_summary for chunk in chunks)
-    assert all(chunk.context_version == "5" for chunk in chunks)
+    assert all(chunk.context_version == "6" for chunk in chunks)
 
 
 @pytest.mark.parametrize("max_findings", [0, 16])

@@ -15,16 +15,17 @@ from pydantic import BaseModel, ValidationError
 from api.core.config import Settings
 from api.schemas.ai import (
     ProviderAIChatResponse,
+    ProviderCVEFixResearch,
     ProviderScanAIAnalysis,
     ProviderScanAIChildAnalysis,
 )
-from api.services.ai.context import AIChatContext, ScanAIContext
+from api.services.ai.context import AIChatContext, FixResearchTarget, ScanAIContext
 
 _ProviderResponseT = TypeVar("_ProviderResponseT", bound=BaseModel)
 
 OPENAI_PROVIDER_ID = "openai"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-AI_PROMPT_VERSION = "8"
+AI_PROMPT_VERSION = "9"
 
 _INSTRUCTIONS_DIR = Path(__file__).parent / "instructions"
 
@@ -51,6 +52,10 @@ CHUNK_CONTEXT_JSON:
 """
 
 USER_SYNTHESIS_PROMPT = """{coverage_notice}SYNTHESIS_CONTEXT_JSON:
+{context_json}
+"""
+
+USER_RESEARCH_PROMPT = """RESEARCH_TARGET_JSON:
 {context_json}
 """
 
@@ -101,6 +106,7 @@ class OpenAIResponsesProvider:
         timeout_seconds: float,
         max_output_tokens: int,
         reasoning_effort: str,
+        research_max_tool_calls: int = 10,
         client: httpx.Client | None = None,
     ) -> None:
         self.api_key = api_key
@@ -108,6 +114,7 @@ class OpenAIResponsesProvider:
         self.timeout_seconds = timeout_seconds
         self.max_output_tokens = max_output_tokens
         self.reasoning_effort = reasoning_effort
+        self.research_max_tool_calls = research_max_tool_calls
         self.client = client
         self._usage_events: list[ProviderUsageEvent] = []
 
@@ -241,6 +248,23 @@ class OpenAIResponsesProvider:
             schema_name="scan_ai_chat",
         )
 
+    def research_fix(
+        self, target: FixResearchTarget
+    ) -> tuple[ProviderCVEFixResearch, set[str]]:
+        return self._respond(
+            USER_RESEARCH_PROMPT.format(context_json=target.model_dump_json()),
+            ProviderCVEFixResearch,
+            operation="fix_research",
+            task="research",
+            language="en",
+            schema_name="cve_fix_research",
+            tools={
+                "tools": [{"type": "web_search", "search_context_size": "medium"}],
+                "max_tool_calls": self.research_max_tool_calls,
+                "include": ["web_search_call.action.sources"],
+            },
+        )
+
     def _complete(
         self,
         user_prompt: str,
@@ -252,6 +276,29 @@ class OpenAIResponsesProvider:
         repair: bool = False,
         schema_name: str = "scan_ai_analysis",
     ) -> _ProviderResponseT:
+        parsed, _ = self._respond(
+            user_prompt,
+            response_schema,
+            operation=operation,
+            task=task,
+            language=language,
+            repair=repair,
+            schema_name=schema_name,
+        )
+        return parsed
+
+    def _respond(
+        self,
+        user_prompt: str,
+        response_schema: type[_ProviderResponseT],
+        *,
+        operation: str,
+        task: str,
+        language: str,
+        repair: bool = False,
+        schema_name: str = "scan_ai_analysis",
+        tools: dict[str, object] | None = None,
+    ) -> tuple[_ProviderResponseT, set[str]]:
         payload = {
             "model": self.model,
             "instructions": _instructions(task, language, repair=repair),
@@ -267,6 +314,7 @@ class OpenAIResponsesProvider:
                     "schema": response_schema.model_json_schema(),
                 }
             },
+            **(tools or {}),
         }
         try:
             response = self._post(payload, operation=operation)
@@ -286,7 +334,9 @@ class OpenAIResponsesProvider:
             ) from exc
         try:
             decoded = json.loads(_output_text(envelope))
-            return response_schema.model_validate(decoded)
+            return response_schema.model_validate(decoded), _consulted_sources(
+                envelope
+            )
         except (json.JSONDecodeError, ValidationError) as exc:
             raise AIProviderError(
                 "invalid_provider_response", retryable=False
@@ -373,6 +423,21 @@ class OpenAIResponsesProvider:
             )
         )
         return response
+
+
+def _consulted_sources(envelope: dict[str, object]) -> set[str]:
+    urls: set[str] = set()
+    output = envelope.get("output")
+    for item in output if isinstance(output, list) else []:
+        if not isinstance(item, dict) or item.get("type") != "web_search_call":
+            continue
+        action = item.get("action")
+        sources = action.get("sources") if isinstance(action, dict) else None
+        for source in sources if isinstance(sources, list) else []:
+            url = source.get("url") if isinstance(source, dict) else None
+            if isinstance(url, str):
+                urls.add(url)
+    return urls
 
 
 def _output_text(envelope: object) -> str:
@@ -578,4 +643,5 @@ def build_ai_provider(settings: Settings) -> OpenAIResponsesProvider | None:
         timeout_seconds=settings.ai_timeout_seconds,
         max_output_tokens=settings.ai_max_output_tokens,
         reasoning_effort=settings.ai_reasoning_effort,
+        research_max_tool_calls=settings.ai_research_max_tool_calls,
     )

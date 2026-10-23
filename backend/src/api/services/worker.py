@@ -67,7 +67,7 @@ def run_ai_worker_once(*, provider: OpenAIResponsesProvider) -> int:
             max_findings=settings.ai_max_findings,
             max_attempts=settings.ai_max_attempts,
             retry_delay_seconds=settings.ai_retry_delay_seconds,
-            stale_after_seconds=max(settings.ai_timeout_seconds * 2, 60),
+            stale_after_seconds=max(settings.ai_timeout_seconds * 10, 60),
         )
     return 0
 

@@ -19,6 +19,7 @@ from api.schemas.read import (
 from api.services.ai.context import (
     AIFindingContext,
     FindingChatContext,
+    FixResearchTarget,
     ScanAIContext,
 )
 from api.services.ai.openai_responses import (
@@ -146,7 +147,7 @@ def test_provider_requests_responses_api_with_strict_output_and_no_storage():
         payload["instructions"]
     )
     assert TEST_TOKEN not in json.dumps(payload)
-    assert '"context_version":"5"' in payload["input"]
+    assert '"context_version":"6"' in payload["input"]
     assert not payload["input"].startswith("Coverage limit:")
     assert "scan_id" not in payload["input"]
 
@@ -278,7 +279,7 @@ def test_instructions_keep_evidence_uncertainty_and_sample_limits():
         _context()
     )
 
-    assert AI_PROMPT_VERSION == "8"
+    assert AI_PROMPT_VERSION == "9"
     instructions = _flat(captured["payload"]["instructions"])
     for rule in (
         "inconclusive, conflicting or truncated evidence is never a confirmed problem",
@@ -539,6 +540,60 @@ def test_provider_answers_chat_with_bounded_structured_schema():
     assert "It never shows that a machine is free of vulnerabilities" in _flat(
         payload["instructions"]
     )
+
+
+def test_research_fix_searches_the_web_and_returns_consulted_sources():
+    captured: dict[str, object] = {}
+    research = {
+        "version_affected": "unknown",
+        "options": [],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        envelope = _completed(json.dumps(research))
+        envelope["output"].insert(
+            0,
+            {
+                "type": "web_search_call",
+                "status": "completed",
+                "action": {
+                    "type": "search",
+                    "sources": [
+                        {"type": "url", "url": "https://vendor.example.com/a"},
+                        {"type": "api", "name": "oai-weather"},
+                    ],
+                },
+            },
+        )
+        return httpx.Response(200, json=envelope)
+
+    result, sources = _provider(handler).research_fix(
+        FixResearchTarget(
+            cve_id="CVE-2026-0001",
+            product="openbsd openssh",
+            version="9.2p1",
+            service="ssh",
+            severity="high",
+            cvss_score=8.1,
+            is_kev=False,
+            kev_required_action=None,
+            epss_score=0.2,
+        )
+    )
+
+    assert result.options == []
+    assert sources == {"https://vendor.example.com/a"}
+    payload = captured["payload"]
+    assert payload["tools"] == [{"type": "web_search", "search_context_size": "medium"}]
+    assert payload["max_tool_calls"] == 10
+    assert payload["include"] == ["web_search_call.action.sources"]
+    assert payload["store"] is False
+    assert payload["text"]["format"]["name"] == "cve_fix_research"
+    assert "# Task: find the fix for one vulnerability" in payload["instructions"]
+    assert payload["instructions"].endswith("Write all prose in English.")
+    assert payload["input"].startswith("RESEARCH_TARGET_JSON:")
+    assert "192.168" not in payload["input"]
 
 
 def test_build_ai_provider_uses_settings_and_requires_a_key(
