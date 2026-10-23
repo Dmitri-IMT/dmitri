@@ -37,6 +37,7 @@ from api.schemas.read import (
     SeverityBreakdown,
 )
 from api.schemas.scan import TERMINATED_BY_USER_CANCEL
+from api.services.products import normalize_product_text, observed_product
 from api.services.read import get_scan_detail, get_scan_risk_summary
 from api.services.scan_evidence import (
     EvidenceCompleteness,
@@ -361,47 +362,19 @@ def describe_observed_products(
             .where(FindingRecord.finding_id.in_(finding_ids))
         ).all()
     )
-    cpes: dict[UUID, list[tuple[str, str | None]]] = {}
+    cpes: dict[UUID, list[str]] = {}
     for finding_id, cpe in session.exec(
         select(FindingRecord.finding_id, CPERecord.cpe)
         .join(CPERecord, CPERecord.port_id == FindingRecord.port_id)
         .where(FindingRecord.finding_id.in_(finding_ids))
     ).all():
-        product = _cpe_product(cpe)
-        if product is not None:
-            cpes.setdefault(finding_id, []).append(product)
+        cpes.setdefault(finding_id, []).append(cpe)
     for finding in findings:
         finding_id = finding_ids_by_ref[finding.finding_ref]
-        finding.service = _normalize_product_text(services.get(finding_id))
-        candidates = sorted(
-            cpes.get(finding_id, []),
-            key=lambda product: (product[1] is None, product),
-        )
-        if candidates:
-            finding.product, finding.version = candidates[0]
-
-
-def _cpe_product(cpe: str) -> tuple[str, str | None] | None:
-    if cpe.startswith("cpe:2.3:"):
-        parts = cpe.split(":")[2:]
-    elif cpe.startswith("cpe:/"):
-        parts = cpe[5:].split(":")
-    else:
-        return None
-    if len(parts) < 3 or parts[0] != "a" or not parts[1] or not parts[2]:
-        return None
-    version = parts[3] if len(parts) > 3 and parts[3] not in {"", "*", "-"} else None
-    product = _normalize_product_text(f"{parts[1]} {parts[2]}".replace("_", " "))
-    if product is None:
-        return None
-    return product, _normalize_product_text(version)
-
-
-def _normalize_product_text(value: str | None) -> str | None:
-    if value is None:
-        return None
-    text = " ".join(value.lower().split())[:160]
-    return text or None
+        finding.service = normalize_product_text(services.get(finding_id))
+        observed = observed_product(cpes.get(finding_id, []))
+        if observed is not None:
+            finding.product, finding.version = observed
 
 
 def materialize_scan_ai_analysis(

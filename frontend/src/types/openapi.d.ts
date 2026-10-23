@@ -2046,12 +2046,24 @@ export interface components {
             unit_id: number;
             port: number;
         };
+        RiskBreakdown: {
+            severity: number;
+            likelihood: number;
+            confidence: number;
+            reachable: number;
+        };
         FindingRecord: {
             risk_score?: number | null;
             exploitability?: number | null;
             /** @enum {string|null} */
             confidence?: "tentative" | "probable" | "confirmed" | null;
             risk_rationale?: string | null;
+            risk_breakdown?: components["schemas"]["RiskBreakdown"] | null;
+            epss_score?: number | null;
+            kev_listed?: boolean;
+            known_ransomware?: boolean;
+            product?: string | null;
+            version?: string | null;
             /** Format: uuid */
             finding_id: string;
             /** Format: uuid */

@@ -16,6 +16,8 @@ from api.core.scan_read import scan_duration_seconds, scan_terminated_by
 from api.core.severity import SEVERITY_ORDER, Severity
 from api.models.command import Agent
 from api.models.persistence import (
+    CPERecord,
+    EpssRecord,
     ExposureRecord,
     FindingRecord,
     HostFindingRecord,
@@ -50,6 +52,7 @@ from api.schemas.read import (
     ModbusDeviceIdentificationView,
     ModbusUnitView,
     Port,
+    RiskBreakdown,
     ScanDetailResponse,
     ScanHostView,
     ScanListResponse,
@@ -69,6 +72,8 @@ from api.services import commands
 from api.services.hosts import highest_severity, open_ports_count
 from api.services.industrial import industrial_services_for_scan_host
 from api.services.inventory import latest_scan_host_for_host
+from api.services.products import observed_product
+from api.services.risk import risk_parts
 from api.services.scan_evidence import (
     evidence_completeness,
     finding_is_demonstrated,
@@ -283,6 +288,7 @@ def get_scan_detail(
     ]
 
     findings = to_finding_reads(
+        session,
         session.exec(
             finding_read_query().where(FindingRecord.scan_id == scan_id)
         ).all()
@@ -450,12 +456,12 @@ def list_findings(
     ).all()
 
     return FindingListResponse(
-        data=to_finding_reads(rows),
+        data=to_finding_reads(session, rows),
         total=total,
         page=page,
         evidence_summary=FindingEvidenceSummary.model_validate(
             summarize_finding_evidence(
-                to_finding_reads(summary_rows), scope="filtered_findings"
+                to_finding_reads(session, summary_rows), scope="filtered_findings"
             )
         ),
     )
@@ -474,7 +480,7 @@ def get_finding_detail(
     ).first()
     if row is None:
         return None
-    return to_finding_reads([row])[0]
+    return to_finding_reads(session, [row])[0]
 
 
 def get_scan_risk_summary(
@@ -538,7 +544,7 @@ def get_scan_risk_summary(
         average_risk_score=(round(sum(scores) / len(scores), 2) if scores else None),
         max_risk_score=max(scores) if scores else None,
         severity=SeverityBreakdown(**severity_counts),
-        top_findings=to_finding_reads(ranked),
+        top_findings=to_finding_reads(session, ranked),
     )
 
 
@@ -818,6 +824,8 @@ def finding_read_query() -> Select:
             ModbusUnitRecord,
             IndustrialServiceRecord,
             RiskSnapshotRecord,
+            EpssRecord,
+            KevRecord,
         )
         .outerjoin(
             ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id
@@ -841,10 +849,25 @@ def finding_read_query() -> Select:
         .outerjoin(
             RiskSnapshotRecord, RiskSnapshotRecord.finding_id == FindingRecord.id
         )
+        .outerjoin(EpssRecord, EpssRecord.cve_id == func.upper(FindingRecord.cve_id))
+        .outerjoin(KevRecord, KevRecord.cve_id == func.upper(FindingRecord.cve_id))
     )
 
 
-def to_finding_reads(rows: Sequence[Row]) -> list[FindingRead]:
+def to_finding_reads(session: Session, rows: Sequence[Row]) -> list[FindingRead]:
+    port_ids = {
+        row.FindingRecord.port_id
+        for row in rows
+        if row.FindingRecord.port_id is not None
+    }
+    cpes: dict[int, list[str]] = {}
+    if port_ids:
+        for port_id, cpe in session.exec(
+            select(CPERecord.port_id, CPERecord.cpe).where(
+                CPERecord.port_id.in_(port_ids)
+            )
+        ).all():
+            cpes.setdefault(port_id, []).append(cpe)
     return [
         _to_finding_read(
             row.FindingRecord,
@@ -855,6 +878,9 @@ def to_finding_reads(rows: Sequence[Row]) -> list[FindingRead]:
             row.IndustrialServiceRecord,
             row.RiskSnapshotRecord,
             row.ModbusUnitRecord.unit_id if row.ModbusUnitRecord else None,
+            row.EpssRecord,
+            row.KevRecord,
+            observed_product(cpes.get(row.FindingRecord.port_id, [])),
         )
         for row in rows
     ]
@@ -882,8 +908,18 @@ def _to_finding_read(
     service: IndustrialServiceRecord | None,
     risk: RiskSnapshotRecord | None,
     unit_id: int | None,
+    epss: EpssRecord | None,
+    kev: KevRecord | None,
+    product: tuple[str, str | None] | None,
 ) -> FindingRead:
     evidence = _finding_evidence_assessment(finding, unit_id)
+    parts = (
+        risk_parts(
+            finding.severity, finding.confidence, finding.port, risk.exploitability
+        )
+        if risk is not None
+        else None
+    )
     return FindingRead(
         finding_id=finding.finding_id,
         scan_id=finding.scan_id,
@@ -909,6 +945,21 @@ def _to_finding_read(
         exploitability=risk.exploitability if risk else None,
         confidence=finding.confidence,
         risk_rationale=risk.rationale if risk else None,
+        risk_breakdown=(
+            RiskBreakdown(
+                severity=round(parts.severity, 1),
+                likelihood=round(parts.likelihood, 1),
+                confidence=round(parts.confidence, 1),
+                reachable=round(parts.reachable, 1),
+            )
+            if parts is not None
+            else None
+        ),
+        epss_score=epss.epss_score if epss is not None else None,
+        kev_listed=kev is not None,
+        known_ransomware=kev.known_ransomware if kev is not None else False,
+        product=product[0] if product is not None else None,
+        version=product[1] if product is not None else None,
         host_hostname=hostname,
         first_seen_at=life.first_seen_at if life else None,
         last_seen_at=life.last_seen_at if life else None,
