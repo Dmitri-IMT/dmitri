@@ -68,6 +68,7 @@ body {
 }
 
 @theme inline {
+  --animate-grid-pulse: grid-pulse 1.2s ease-in-out infinite;
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
   --color-canvas: var(--canvas);
@@ -169,6 +170,16 @@ body {
   }
   [data-slot='password-input'] input::-webkit-credentials-auto-fill-button {
     display: none;
+  }
+}
+
+@keyframes grid-pulse {
+  0%,
+  100% {
+    background-color: var(--rule);
+  }
+  50% {
+    background-color: var(--ink);
   }
 }
 

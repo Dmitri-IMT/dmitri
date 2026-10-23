@@ -110,9 +110,7 @@ describe('ScanDelete', () => {
     scanDetail(scan)
     renderScan(scan.scan_id)
 
-    expect(
-      await screen.findByRole('heading', { name: 'Machines seen' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByTestId('it-section-machines')).toBeInTheDocument()
     expect(screen.queryByTestId('scan-delete')).not.toBeInTheDocument()
   })
 })

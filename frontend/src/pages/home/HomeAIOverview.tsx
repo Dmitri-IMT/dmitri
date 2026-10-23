@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import type { HomeSnapshot } from '@/api/home'
 import useI18n from '@/i18n/useI18n'
 import { evidenceLimitKey } from '@/lib/evidenceCompleteness'
+import { TIME_KEY, WHO_KEY } from '@/lib/fixTask'
 
 function HomeAIOverview({
   latestScan,
@@ -102,17 +103,21 @@ function HomeAIOverview({
           {t('ai.evidenceLimit')}
           {limitKey != null && ` ${t(limitKey)}`}
         </p>
-        <p className="text-title-xs">{analysis.analysis.executive_summary}</p>
-        <p className="max-w-prose text-body-md">
-          {analysis.analysis.plain_language_summary}
-        </p>
-        {analysis.analysis.priority_actions.length > 0 && (
-          <section aria-labelledby="home-ai-actions-title">
+        <p className="max-w-prose text-body-md">{analysis.analysis.summary}</p>
+        {analysis.analysis.tasks.length > 0 && (
+          <section
+            aria-labelledby="home-ai-actions-title"
+            className="flex flex-col gap-1"
+          >
             <h3 id="home-ai-actions-title" className="text-title-xs">
               {t('ai.whatToDoFirst')}
             </h3>
-            <p className="mt-2 max-w-prose text-body-md">
-              {analysis.analysis.priority_actions[0].description}
+            <p className="max-w-prose text-body-md font-semibold">
+              {analysis.analysis.tasks[0].title}
+            </p>
+            <p className="text-caption-md text-ink-muted">
+              {t(WHO_KEY[analysis.analysis.tasks[0].who])} ·{' '}
+              {t(TIME_KEY[analysis.analysis.tasks[0].time])}
             </p>
           </section>
         )}

@@ -172,6 +172,15 @@ class FindingModbusUnitRef(BaseModel):
     port: Annotated[int, Field(ge=1, le=65535)]
 
 
+class RiskBreakdown(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Annotated[float, Field(ge=0, le=45)]
+    likelihood: Annotated[float, Field(ge=0, le=35)]
+    confidence: Annotated[float, Field(ge=0, le=15)]
+    reachable: Annotated[float, Field(ge=0, le=5)]
+
+
 class FindingRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -199,6 +208,12 @@ class FindingRead(BaseModel):
     exploitability: Annotated[float | None, Field(default=None, ge=0, le=1)]
     confidence: Literal["tentative", "probable", "confirmed"] | None = None
     risk_rationale: str | None = None
+    risk_breakdown: RiskBreakdown | None = None
+    epss_score: Annotated[float | None, Field(default=None, ge=0, le=1)]
+    kev_listed: bool = False
+    known_ransomware: bool = False
+    product: str | None = None
+    version: str | None = None
     host_hostname: str | None = None
     first_seen_at: datetime | None = None
     last_seen_at: datetime | None = None

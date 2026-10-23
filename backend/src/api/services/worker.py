@@ -8,8 +8,8 @@ from datetime import UTC, datetime
 from api.core.config import get_settings
 from api.db.session import get_session
 from api.services.agent_updates_http import expire_unclaimed_updates
-from api.services.ai.groq import GroqProvider, build_ai_provider
 from api.services.ai.jobs import process_ready_ai_analyses
+from api.services.ai.openai_responses import OpenAIResponsesProvider, build_ai_provider
 from api.services.commands import sweep_stale_commands
 from api.services.enrichment import process_pending_enrichment_jobs
 from api.services.nvd import NvdClient
@@ -57,7 +57,7 @@ def run_ai_worker_loop() -> None:
     _poll_forever(lambda: run_ai_worker_once(provider=provider), poll_interval)
 
 
-def run_ai_worker_once(*, provider: GroqProvider) -> int:
+def run_ai_worker_once(*, provider: OpenAIResponsesProvider) -> int:
     settings = get_settings()
     for session in get_session():
         return process_ready_ai_analyses(
@@ -67,7 +67,7 @@ def run_ai_worker_once(*, provider: GroqProvider) -> int:
             max_findings=settings.ai_max_findings,
             max_attempts=settings.ai_max_attempts,
             retry_delay_seconds=settings.ai_retry_delay_seconds,
-            stale_after_seconds=max(settings.ai_timeout_seconds * 2, 60),
+            stale_after_seconds=max(settings.ai_timeout_seconds * 10, 60),
         )
     return 0
 

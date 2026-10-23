@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlmodel import Session, select
@@ -25,6 +26,35 @@ CONFIDENCE_WEIGHTS = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class RiskParts:
+    severity: float
+    likelihood: float
+    confidence: float
+    reachable: float
+
+    @property
+    def total(self) -> float:
+        return min(
+            100.0,
+            round(
+                self.severity + self.likelihood + self.confidence + self.reachable,
+                2,
+            ),
+        )
+
+
+def risk_parts(
+    severity: str, confidence: str | None, port: int | None, exploitability: float
+) -> RiskParts:
+    return RiskParts(
+        severity=SEVERITY_WEIGHTS.get(severity, 0.5) * 45.0,
+        likelihood=exploitability * 35.0,
+        confidence=CONFIDENCE_WEIGHTS.get(confidence or "", 0.5) * 15.0,
+        reachable=5.0 if port is not None else 0.0,
+    )
+
+
 def refresh_risk_snapshot(
     session: Session,
     finding: FindingRecord,
@@ -39,31 +69,18 @@ def refresh_risk_snapshot(
         session.get(EpssRecord, finding.cve_id.upper()) if finding.cve_id else None
     )
 
-    severity_weight = SEVERITY_WEIGHTS.get(finding.severity, 0.5)
-    confidence_weight = CONFIDENCE_WEIGHTS.get(finding.confidence, 0.5)
     epss_score = epss_record.epss_score if epss_record is not None else 0.0
     kev_boost = 0.3 if kev_record is not None else 0.0
     ransomware_boost = (
         0.1 if kev_record is not None and kev_record.known_ransomware else 0.0
     )
-    exposed_service_boost = 0.05 if finding.port is not None else 0.0
-
     exploitability = min(
         1.0,
         round((epss_score * 0.7) + kev_boost + ransomware_boost, 4),
     )
-    risk_score = min(
-        100.0,
-        round(
-            (
-                severity_weight * 45.0
-                + exploitability * 35.0
-                + confidence_weight * 15.0
-                + exposed_service_boost * 100.0
-            ),
-            2,
-        ),
-    )
+    risk_score = risk_parts(
+        finding.severity, finding.confidence, finding.port, exploitability
+    ).total
 
     rationale_parts = [
         f"severity={finding.severity}",

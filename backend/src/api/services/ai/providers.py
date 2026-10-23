@@ -3,10 +3,11 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from api.schemas.ai import (
+    ProviderCVEFixResearch,
     ProviderScanAIAnalysis,
     ProviderScanAIChildAnalysis,
 )
-from api.services.ai.context import ScanAIContext
+from api.services.ai.context import FixResearchTarget, ScanAIContext
 
 
 @runtime_checkable
@@ -46,6 +47,17 @@ class BoundedScanAnalysisProvider(ScanAnalysisProvider, Protocol):
         *,
         language: str = "en",
     ) -> ProviderScanAIAnalysis: ...
+
+
+@runtime_checkable
+class FixResearchProvider(Protocol):
+    def research_fix(
+        self, target: FixResearchTarget
+    ) -> tuple[ProviderCVEFixResearch, set[str]]: ...
+
+
+def supports_fix_research(provider: object) -> bool:
+    return isinstance(provider, FixResearchProvider)
 
 
 def supports_bounded_scan_analysis(provider: object) -> bool:

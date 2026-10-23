@@ -61,6 +61,7 @@ RUNTIME_GRANTS_BY_TABLE = {
             "hosts",
             "commands",
             "ai_scan_analyses",
+            "ai_explanations",
             "mcp_clients",
             "mcp_connections",
             "mcp_authorizations",

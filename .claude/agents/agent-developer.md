@@ -3,7 +3,7 @@ name: agent-developer
 description: >-
   Implements one TASKS.md task per the approved ARCHITECTURE.md / DESIGN.md, in any layer of the
   repo. Surgical edits only, implements every success criterion, loads the layer's conventions
-  skill before writing. Spawned by the feature-orchestrator, one task at a time.
+  skill before writing. Spawned for one TASKS.md task at a time.
 readonly: false
 ---
 

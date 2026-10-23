@@ -21,6 +21,7 @@ from api.schemas.ai import (
     ScanAIAnalysisCompleted,
     ScanAIAnalysisFailed,
     ScanAIAnalysisNotRequested,
+    ScanAIAnalysisProgress,
     ScanAIAnalysisQueued,
     ScanAIAnalysisResponse,
     ScanAIAnalysisUnavailable,
@@ -33,14 +34,17 @@ from api.services.ai.context import (
     build_scan_ai_context,
     materialize_scan_ai_analysis,
 )
-from api.services.ai.groq import (
+from api.services.ai.openai_responses import (
     AI_PROMPT_VERSION,
-    GROQ_PROVIDER_ID,
+    OPENAI_PROVIDER_ID,
     AIProviderError,
-    GroqProvider,
+    OpenAIResponsesProvider,
 )
+from api.services.ai.providers import supports_fix_research
+from api.services.ai.research import attach_fix_records
 from api.services.ai.telemetry import drain_provider_usage, persist_usage_events
 from api.services.ai.validation import (
+    KEV_TASK_ERROR,
     AIAnalysisValidationError,
     sanitize_scan_ai_analysis,
 )
@@ -52,6 +56,7 @@ from api.services.jobs import claim_jobs, retry_or_fail
 
 logger = logging.getLogger(__name__)
 ACTIVE_ENRICHMENT_STATUSES = ("pending", "running")
+FIX_TASK_SHAPE_SINCE = 11
 
 
 class AIAnalysisAlreadyRequestedError(ValueError):
@@ -83,7 +88,18 @@ def scan_ai_analysis_response(
         )
     if record.status == "failed":
         return ScanAIAnalysisFailed(**fields, completed_at=record.completed_at)
-    return ScanAIAnalysisQueued(**fields)
+    return ScanAIAnalysisQueued(
+        **fields,
+        progress=(
+            ScanAIAnalysisProgress(
+                stage=record.progress_stage,
+                done=record.progress_done or 0,
+                total=record.progress_total or 0,
+            )
+            if record.status == "processing" and record.progress_stage is not None
+            else None
+        ),
+    )
 
 
 def get_scan_ai_analysis(
@@ -112,10 +128,19 @@ def get_scan_ai_analysis(
             AIScanAnalysisRecord.language == language,
         )
     ).first()
-    if record is None:
+    if record is None or _has_old_shape(record):
         return ScanAIAnalysisNotRequested(scan_id=scan_id, status="not_requested")
 
     return scan_ai_analysis_response(record)
+
+
+def _has_old_shape(record: AIScanAnalysisRecord) -> bool:
+    if record.status != "completed":
+        return False
+    return not (
+        record.prompt_version.isdigit()
+        and int(record.prompt_version) >= FIX_TASK_SHAPE_SINCE
+    )
 
 
 def request_scan_ai_analysis(
@@ -149,7 +174,7 @@ def request_scan_ai_analysis(
     ).first()
     current_time = now or datetime.now(timezone.utc)
     if record is not None:
-        if record.status != "failed":
+        if record.status != "failed" and not _has_old_shape(record):
             raise AIAnalysisAlreadyRequestedError
         record.status = "pending"
         record.attempts = 0
@@ -159,6 +184,9 @@ def request_scan_ai_analysis(
         record.next_attempt_at = None
         record.analysis_json = None
         record.context_hash = None
+        record.progress_stage = None
+        record.progress_done = None
+        record.progress_total = None
         record.started_at = None
         record.completed_at = None
         session.add(record)
@@ -220,7 +248,7 @@ def enqueue_auto_scan_analysis(
             scan_id,
             org_id=_scan_org_id(session, scan_id),
             ai_enabled=True,
-            provider_name=GROQ_PROVIDER_ID,
+            provider_name=OPENAI_PROVIDER_ID,
             model=resolved_settings.ai_model,
             language="en",
             commit=commit,
@@ -240,7 +268,7 @@ def _scan_org_id(session: Session, scan_id: UUID) -> UUID:
 def process_ready_ai_analyses(
     session: Session,
     *,
-    provider: GroqProvider,
+    provider: OpenAIResponsesProvider,
     batch_size: int,
     max_findings: int,
     max_attempts: int,
@@ -302,7 +330,7 @@ def _process_claimed_analysis(
     session: Session,
     record: AIScanAnalysisRecord,
     *,
-    provider: GroqProvider,
+    provider: OpenAIResponsesProvider,
     max_findings: int,
     max_attempts: int,
     retry_delay_seconds: float,
@@ -336,6 +364,13 @@ def _process_claimed_analysis(
     if scan is None or scan.org_id is None:
         return fail("scan_unavailable", False)
 
+    def report(stage: str, done: int, total: int) -> None:
+        record.progress_stage = stage
+        record.progress_done = done
+        record.progress_total = total
+        session.add(record)
+        session.commit()
+
     phase = "context_build"
     try:
         context = build_scan_ai_context(
@@ -344,9 +379,15 @@ def _process_claimed_analysis(
         provider_analysis = None
         coverage = AnalysisCoverage(0, 0, 0)
         if context is not None:
+            if supports_fix_research(provider):
+                phase = "fix_research"
+                report("fixes", 0, 0)
+                attach_fix_records(
+                    session, context, provider, settings=get_settings(), now=now
+                )
             phase = "provider_analysis"
             provider_analysis, coverage = run_bounded_analysis(
-                provider, context, language=record.language
+                provider, context, language=record.language, on_progress=report
             )
         phase = "materialization"
         analysis = (
@@ -378,7 +419,7 @@ def _process_claimed_analysis(
     except ValueError as exc:
         if isinstance(exc, AIAnalysisValidationError):
             code = {
-                "analysis omits a KEV finding from actions": "missing_kev_action",
+                KEV_TASK_ERROR: "missing_kev_task",
                 "analysis contains an unknown reference": "unknown_reference",
                 "analysis contains duplicate finding references": (
                     "duplicate_finding_reference"

@@ -90,12 +90,15 @@ SCHEMA_NAMES = (
     "HomeEventsPage",
     "HomeActivityPage",
     "HomeSnapshot",
-    "AIRecommendedAction",
-    "AIFindingExplanation",
+    "AISourceLink",
+    "AIFixTask",
+    "AIFindingNote",
     "ScanAIAnalysis",
     "ScanAIAnalysisUnavailable",
     "ScanAIAnalysisNotRequested",
     "ScanAIAnalysisQueued",
+    "ScanAIAnalysisProgress",
+    "RiskBreakdown",
     "ScanAIAnalysisFailed",
     "ScanAIAnalysisCompleted",
     "ScanReportResponse",
@@ -109,7 +112,11 @@ SCHEMA_NAMES = (
     "ReportFinding",
     "ReportAction",
     "ReportSource",
-    "AIChatResponse",
+    "AIChatHistoryEntry",
+    "AIChatHistoryResponse",
+    "AIConversationSummary",
+    "AIConversationsResponse",
+    "AIContextChatRequest",
     "ScanDeletionResponse",
     "HostDeletionResponse",
 )
@@ -985,3 +992,15 @@ def test_agent_websocket_close_code_table_publishes_revoked():
     assert "`revoked`" in rows[0]
     assert "Park; retry once per hour" in rows[0]
     assert "admin restore" in rows[0]
+
+
+def test_explanation_contract_declares_auth_and_error_envelopes():
+    contract = yaml.safe_load(CONTRACT_PATH.read_text())
+    operation = contract["paths"]["/api/v1/ai/explain"]["post"]
+    assert operation["security"] == [{"FrontendBearerAuth": []}]
+    assert {"200", "401", "404", "422", "429", "502", "503"} <= set(
+        operation["responses"]
+    )
+    for status in ("429", "502", "503"):
+        schema = operation["responses"][status]["content"]["application/json"]["schema"]
+        assert schema == {"$ref": "#/components/schemas/ErrorResponse"}

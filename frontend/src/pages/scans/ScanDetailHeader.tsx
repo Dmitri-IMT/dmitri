@@ -1,86 +1,13 @@
-import type { ReactNode } from 'react'
 import BackLink from '@/components/BackLink'
-import EmptyMark from '@/components/EmptyMark'
 import Timestamp from '@/components/Timestamp'
+import ExplainPanel from '@/components/ExplainPanel'
 import ScanReports from '@/pages/scans/ScanReports'
 import ScanPartialWarning from '@/pages/scans/ScanPartialWarning'
-import { formatScanDuration } from '@/lib/scanDuration'
-import { SCAN_MODE_LABEL } from '@/lib/scanModes'
-import { hidesCounts, isUnfinished, scanStatusLabel } from '@/lib/scanStatus'
+import { isUnfinished, scanStatusLabel } from '@/lib/scanStatus'
 import useI18n from '@/i18n/useI18n'
 import type { components } from '@/types/openapi'
 
 type ScanDetailResponse = components['schemas']['ScanDetailResponse']
-
-function StripEntry({
-  label,
-  value,
-  testId,
-}: {
-  label: string
-  value: ReactNode
-  testId?: string
-}) {
-  return (
-    <div data-testid={testId} className="flex min-w-0 flex-col gap-1">
-      <span className="text-caption-md uppercase text-edge">{label}</span>
-      <span className="truncate text-body-md tabular-nums">{value}</span>
-    </div>
-  )
-}
-
-export function ScanSummaryStrip({ scan }: { scan: ScanDetailResponse }) {
-  const { t } = useI18n()
-  const durationCopy = formatScanDuration(scan.duration)
-  const needsReview = scan.exposures.filter(
-    (exposure) => exposure.attention !== 'informational',
-  ).length
-  const attackSurface =
-    scan.assessment_status === 'unavailable'
-      ? t('common.unavailable')
-      : `${t('common.reachableServices', { count: scan.exposures.length })} · ${t('common.needsReview', { count: needsReview })}`
-  return (
-    <div data-testid="scan-assessment-summary">
-      <div
-        data-testid="scan-summary-strip"
-        className="flex flex-wrap items-center justify-between gap-6 border-y border-border py-4"
-      >
-        <div className="flex min-w-0 flex-wrap gap-12">
-          <StripEntry
-            label={t('common.mode')}
-            value={SCAN_MODE_LABEL[scan.scan_mode]}
-          />
-          <StripEntry label={t('common.network')} value={scan.subnet} />
-          {!hidesCounts(scan.status) && (
-            <>
-              <StripEntry
-                label={t('common.machinesSeen')}
-                value={String(scan.host_count)}
-              />
-              <StripEntry
-                label={t('common.attackSurface')}
-                value={attackSurface}
-              />
-              <StripEntry
-                label={t('common.vulnerabilities')}
-                value={String(scan.finding_count)}
-              />
-            </>
-          )}
-          <StripEntry
-            label={t('common.duration')}
-            value={durationCopy ?? <EmptyMark />}
-            testId="scan-summary-duration"
-          />
-          <ScanPartialWarning scan={scan} />
-        </div>
-        {scan.status !== 'failed' &&
-          scan.status !== 'cancelled' &&
-          !isUnfinished(scan.status) && <ScanReports scanId={scan.scan_id} />}
-      </div>
-    </div>
-  )
-}
 
 function ScanDetailHeader({ scan }: { scan: ScanDetailResponse }) {
   const { t } = useI18n()
@@ -88,9 +15,28 @@ function ScanDetailHeader({ scan }: { scan: ScanDetailResponse }) {
   return (
     <div data-testid="scan-detail-header" className="flex flex-col gap-4">
       <BackLink fallback="/scans" />
-      <h1 className="text-title-lg">
-        Scan · <Timestamp value={scan.timestamp} />
-      </h1>
+      <div className="flex items-end justify-between gap-6">
+        <div className="flex flex-col gap-2">
+          <p className="text-caption-md text-ink-muted">
+            Scan · <Timestamp value={scan.timestamp} /> ·{' '}
+            {scanStatusLabel(scan.status)}
+          </p>
+          <h1 className="text-title-lg">
+            Scan · <Timestamp value={scan.timestamp} />
+          </h1>
+        </div>
+        {scan.status === 'completed' && (
+          <div className="flex items-center gap-3">
+            <ExplainPanel
+              scope="scan"
+              contextId={scan.scan_id}
+              scanId={scan.scan_id}
+            />
+            <ScanReports scanId={scan.scan_id} />
+          </div>
+        )}
+      </div>
+      <ScanPartialWarning scan={scan} />
       {isUnfinished(scan.status) && (
         <div className="flex flex-col gap-2" data-testid="scan-progress">
           <div className="flex items-center justify-between text-body-sm">

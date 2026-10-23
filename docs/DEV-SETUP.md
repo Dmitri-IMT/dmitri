@@ -223,19 +223,26 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173
 # Email links must return to the local SPA rather than the hosted deployment:
 APP_BASE_URL=http://localhost:5173
 
-# Optional AI overview (Groq). Off by default. Needs a key on the worker to run jobs,
-# and the same pair on the API or Scan Detail returns unavailable.
+# Optional AI (OpenAI Responses API). Off by default. Needs a key on the worker to
+# run jobs, and the same pair on the API or Scan Detail returns unavailable.
 # AI_ENABLED=true
 # AI_AUTO_ANALYSIS=false
 # AI_API_KEY=
-# AI_MODEL=openai/gpt-oss-120b
+# AI_MODEL=gpt-6-luna
 # AI_POLL_INTERVAL_SECONDS=5
 # AI_MAX_FINDINGS=10
-# AI_TIMEOUT_SECONDS=30
-# AI_MAX_OUTPUT_TOKENS=4096
-# AI_REASONING_EFFORT=low
+# AI_TIMEOUT_SECONDS=120
+# AI_MAX_OUTPUT_TOKENS=25000
+# AI_REASONING_EFFORT=high
 # AI_MAX_ATTEMPTS=2
 # AI_RETRY_DELAY_SECONDS=30
+# AI_RESEARCH_MAX_TOOL_CALLS=10
+# AI_FIX_RECORD_TTL_FIXED_DAYS=14
+# AI_FIX_RECORD_TTL_UNFIXED_DAYS=2
+# AI_CHAT_MAX_TOOL_CALLS=10
+# AI_CHAT_DAILY_LIMIT=30
+# AI_SEARCH_COUNTRY=
+# AI_SEARCH_TIMEZONE=
 # ENRICHMENT_POLL_INTERVAL_SECONDS=5
 # ENRICHMENT_BATCH_SIZE=10
 # ENRICHMENT_MAX_ATTEMPTS=3
@@ -291,10 +298,24 @@ uv run python -m api.worker_main
 ```
 
 When `AI_ENABLED=true` and `AI_API_KEY` is set, this same process starts an AI poll loop in a
-daemon thread. Completing a scan does not call Groq. A member presses **Explain this scan**
-(`POST /api/v1/scans/{id}/analysis`). The worker will not claim that job while the scan still
-has `pending` or `running` enrichment jobs. Put the same `AI_ENABLED` + `AI_API_KEY` on the
-API process or Scan Detail returns `unavailable`.
+daemon thread. Completing a scan does not call OpenAI unless `AI_AUTO_ANALYSIS=true`. A member
+presses **Explain this scan** (`POST /api/v1/scans/{id}/analysis`). The worker will not claim
+that job while the scan still has `pending` or `running` enrichment jobs. Put the same
+`AI_ENABLED` + `AI_API_KEY` on the API process or Scan Detail returns `unavailable`.
+
+#### Getting an OpenAI key
+
+1. Sign in at `platform.openai.com`, add billing under **Settings → Billing**, and set a
+   spend alert and a hard limit under **Settings → Organization → Limits**.
+2. Create one project per environment (for example `dmitri-local` and `dmitri-prod`).
+3. Under **Settings → API keys**, create a key for the project (a service-account owner and
+   an expiry date if offered). Copy it once into `AI_API_KEY` in `backend/.env`. Never put it
+   in `frontend/.env` or commit it.
+4. Every request sends `store: false`, so OpenAI keeps no response objects. API data is not
+   used for training by default; abuse-monitoring logs are kept for up to 30 days.
+
+A `401` from the worker means the key is wrong. A `429` with `insufficient_quota` means
+billing is missing or the hard limit was reached; the job fails without retrying.
 
 ### Create the first user
 

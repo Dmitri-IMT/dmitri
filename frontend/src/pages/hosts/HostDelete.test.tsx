@@ -57,9 +57,7 @@ describe('HostDelete', () => {
     hostDetail(HOST, [])
     renderHost()
 
-    expect(
-      await screen.findByRole('heading', { name: 'Scan history' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByTestId('it-section-history')).toBeInTheDocument()
     expect(screen.queryByTestId('host-delete')).not.toBeInTheDocument()
   })
 })

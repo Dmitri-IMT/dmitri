@@ -31,9 +31,9 @@ the team's source of truth for how features move from idea to merged code.
 | Role | Who | Does |
 |------|-----|------|
 | Operator | Human | Invokes skills, approves specs, accepts dev-ready work |
-| Planner | `feature-planning` skill | Phase 1 — writes specs, stops for approval |
+| Planner | Main session with `architecture-agent` and the design agents | Phase 1 — writes specs, stops for approval |
 | Refiner | `refine-specs` skill | Phase 1.5 — grills specs, edits them inline |
-| Orchestrator | `feature-orchestrator` skill | Phases 2–5 — TASKS.md, spawns subagents, never edits app code |
+| Orchestrator | Main session | Phases 2–5 — TASKS.md, spawns subagents, never edits app code |
 | Subagents | `architecture-agent`, `tui-design-agent`, `frontend-design-agent`, `agent-developer`, `test-engineer`, `code-reviewer` | Plan, implement, test, approve/reject |
 | Nuke | Human only — `nuke` skill | Pre-push branch-delta audit; report only |
 | Commit / PR | Human only — `commit`, `create-pr` skills | Local commits, then open the PR |
@@ -42,10 +42,10 @@ the team's source of truth for how features move from idea to merged code.
 
 ```
 0. (optional) consult-docs to load the knowledge base selectively
-1. /feature-planning            → TRUTH.md, ARCHITECTURE.md, (DESIGN.md)  → [HALT]
+1. write specs                 → TRUTH.md, ARCHITECTURE.md, (DESIGN.md)  → [HALT]
 1.5 /refine-specs               → grill + edit specs inline (optional)
     --- human approves specs ---
-2. /feature-orchestrator        → TASKS.md
+2. /create-tasks                → TASKS.md
 3. per task (sequential): agent-developer → test-engineer → code-reviewer
    - [REJECT] 1–3 → fresh agent-developer with feedback
    - 4th [REJECT] → STRUCTURAL_REEVAL.md + human gate
@@ -77,17 +77,17 @@ Canonical shapes live in `specs/_templates/`.
 ```mermaid
 sequenceDiagram
     actor Operator
-    participant Planner as feature-planning
+    participant Planner as Main session (planning)
     participant Specs as Spec files
-    participant Orch as feature-orchestrator
+    participant Orch as Main session (orchestration)
     participant Coder as agent-developer
     participant Tester as test-engineer
     participant Rev as code-reviewer
 
-    Operator->>Planner: /feature-planning
+    Operator->>Planner: plan feature
     Planner->>Specs: TRUTH, ARCHITECTURE, (DESIGN)
     Planner->>Operator: request approval (HALT)
-    Operator-->>Orch: /feature-orchestrator
+    Operator-->>Orch: /create-tasks
     Orch->>Specs: TASKS.md
     loop each task sequentially
         Orch->>Coder: task + spec paths

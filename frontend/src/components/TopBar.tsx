@@ -5,6 +5,7 @@ import { useSession } from '@/auth/useSession'
 import AdminOnly from '@/components/AdminOnly'
 import ThemeToggle from '@/components/ThemeToggle'
 import LanguageSelect from '@/components/LanguageSelect'
+import GlobalAssistant from '@/components/GlobalAssistant'
 import useI18n from '@/i18n/useI18n'
 import { Button } from '@/components/ui/button'
 import {
@@ -66,7 +67,8 @@ function TopBar() {
             {t('nav.settings')}
           </NavLink>
         </nav>
-        <div className="flex items-center justify-self-end">
+        <div className="flex items-center gap-3 justify-self-end">
+          <GlobalAssistant />
           {user && (
             <span
               className="sr-only"

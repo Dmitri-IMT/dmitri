@@ -64,15 +64,16 @@ def build_scan_report(
             scan_mode=detail.scan_mode,
             ai_explanation_available=completed is not None,
             overview=(
-                completed.analysis.plain_language_summary if completed else
+                completed.analysis.summary if completed else
                 _fallback_overview(language, len(education["devices"]),
                                    len(education["appendix"]))
             ),
             actions=_report_actions(risk, completed, education["appendix"], language),
             method=_method_text(language),
             limitations=(
-                list(completed.analysis.uncertainties) if completed else
-                [_fallback_limitation(language)]
+                ([completed.analysis.not_checked]
+                 if completed and completed.analysis.not_checked else [])
+                if completed else [_fallback_limitation(language)]
             ) + _method_limitations(language, detail.assessment_status),
         )
     else:
@@ -127,9 +128,15 @@ def _report_actions(
     appendix: list[ReportFinding],
     language: AILanguage,
 ) -> list[ReportAction]:
-    if completed and completed.analysis.priority_actions:
-        return [action.model_dump(mode="json")
-                for action in completed.analysis.priority_actions]
+    if completed and completed.analysis.tasks:
+        return [
+            ReportAction(
+                priority=task.priority, title=task.title,
+                description=" ".join(task.steps),
+                related_finding_ids=[str(item) for item in task.finding_ids],
+            )
+            for task in completed.analysis.tasks
+        ]
     records = {item["finding_id"]: item for item in appendix}
     actions = []
     for finding in risk.top_findings[:3]:

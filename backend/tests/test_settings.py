@@ -78,7 +78,6 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     monkeypatch.setenv("AI_ENABLED", "true")
     monkeypatch.setenv("AI_MODEL", "custom-model")
     monkeypatch.setenv("AI_API_KEY", "secret-ai-key")
-    monkeypatch.setenv("AI_API_BASE_URL", "https://example.test/openai/v1")
     monkeypatch.setenv("AI_MAX_FINDINGS", "12")
     monkeypatch.setenv("AI_TIMEOUT_SECONDS", "25")
     monkeypatch.setenv("AI_MAX_OUTPUT_TOKENS", "2048")
@@ -112,7 +111,6 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     assert settings.ai_model == "custom-model"
     assert settings.ai_api_key is not None
     assert settings.ai_api_key.get_secret_value() == "secret-ai-key"
-    assert settings.ai_api_base_url == "https://example.test/openai/v1"
     assert settings.ai_max_findings == 12
     assert settings.ai_timeout_seconds == 25
     assert settings.ai_max_output_tokens == 2048
@@ -148,7 +146,6 @@ def test_carried_fields_default_when_env_unset(
         "AI_ENABLED",
         "AI_MODEL",
         "AI_API_KEY",
-        "AI_API_BASE_URL",
         "AI_MAX_FINDINGS",
         "AI_TIMEOUT_SECONDS",
         "AI_MAX_OUTPUT_TOKENS",
@@ -185,13 +182,12 @@ def test_carried_fields_default_when_env_unset(
     assert settings.enrichment_retry_delay_seconds == 30
     assert settings.enrichment_stale_after_seconds == 120
     assert settings.ai_enabled is False
-    assert settings.ai_model == "openai/gpt-oss-120b"
+    assert settings.ai_model == "gpt-6-luna"
     assert settings.ai_api_key is None
-    assert settings.ai_api_base_url == "https://api.groq.com/openai/v1"
     assert settings.ai_max_findings == 10
-    assert settings.ai_timeout_seconds == 30
-    assert settings.ai_max_output_tokens == 4096
-    assert settings.ai_reasoning_effort == "low"
+    assert settings.ai_timeout_seconds == 120
+    assert settings.ai_max_output_tokens == 25_000
+    assert settings.ai_reasoning_effort == "high"
     assert settings.ai_max_attempts == 2
     assert settings.ai_retry_delay_seconds == 30
     assert settings.ai_poll_interval_seconds == 5.0

@@ -26,26 +26,41 @@ class Settings(BaseSettings):
     database_url: SecretStr = Field(alias="DATABASE_URL")
     ai_enabled: bool = Field(default=False, alias="AI_ENABLED")
     ai_auto_analysis: bool = Field(default=False, alias="AI_AUTO_ANALYSIS")
-    ai_model: str = Field(default="openai/gpt-oss-120b", alias="AI_MODEL")
+    ai_model: str = Field(default="gpt-6-luna", alias="AI_MODEL")
     ai_api_key: SecretStr | None = Field(default=None, alias="AI_API_KEY")
-    ai_api_base_url: str = Field(
-        default="https://api.groq.com/openai/v1",
-        alias="AI_API_BASE_URL",
-    )
     ai_max_findings: int = Field(default=10, ge=1, le=15, alias="AI_MAX_FINDINGS")
     ai_timeout_seconds: float = Field(
-        default=30.0, gt=0, le=120, alias="AI_TIMEOUT_SECONDS"
+        default=120.0, gt=0, le=600, alias="AI_TIMEOUT_SECONDS"
     )
     ai_max_output_tokens: int = Field(
-        default=4096, ge=256, le=8192, alias="AI_MAX_OUTPUT_TOKENS"
+        default=25_000, ge=256, le=128_000, alias="AI_MAX_OUTPUT_TOKENS"
     )
-    ai_reasoning_effort: Literal["low", "medium", "high"] = Field(
-        default="low", alias="AI_REASONING_EFFORT"
-    )
+    ai_reasoning_effort: Literal[
+        "none", "low", "medium", "high", "xhigh", "max"
+    ] = Field(default="high", alias="AI_REASONING_EFFORT")
     ai_max_attempts: int = Field(default=2, ge=1, le=5, alias="AI_MAX_ATTEMPTS")
     ai_retry_delay_seconds: float = Field(
         default=30.0, ge=0, le=3600, alias="AI_RETRY_DELAY_SECONDS"
     )
+    ai_fix_record_ttl_fixed_days: int = Field(
+        default=14, ge=1, le=90, alias="AI_FIX_RECORD_TTL_FIXED_DAYS"
+    )
+    ai_fix_record_ttl_unfixed_days: int = Field(
+        default=2, ge=1, le=90, alias="AI_FIX_RECORD_TTL_UNFIXED_DAYS"
+    )
+    ai_research_max_tool_calls: int = Field(
+        default=10, ge=1, le=20, alias="AI_RESEARCH_MAX_TOOL_CALLS"
+    )
+    ai_chat_max_tool_calls: int = Field(
+        default=10, ge=1, le=20, alias="AI_CHAT_MAX_TOOL_CALLS"
+    )
+    ai_chat_daily_limit: int = Field(
+        default=30, ge=1, le=1000, alias="AI_CHAT_DAILY_LIMIT"
+    )
+    ai_search_country: str | None = Field(
+        default=None, pattern=r"^[A-Z]{2}$", alias="AI_SEARCH_COUNTRY"
+    )
+    ai_search_timezone: str | None = Field(default=None, alias="AI_SEARCH_TIMEZONE")
     ai_poll_interval_seconds: float = Field(
         default=5.0,
         alias="AI_POLL_INTERVAL_SECONDS",

@@ -3,19 +3,14 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-from api.schemas.ai import ProviderScanAIAnalysis, ProviderScanAIChildAnalysis
+from api.schemas.ai import (
+    MachineExplanation,
+    ProviderScanAIAnalysis,
+    ProviderScanAIChildAnalysis,
+    ScanExplanation,
+)
 
-WRITING_SKILL_VERSION = "1"
-
-WRITING_SKILL_INSTRUCTIONS = """Write calmly in the requested language for a
-non-technical owner. Use short, active sentences and only facts from the supplied
-context. Use plain-language terms for vulnerabilities and machines. In English, say
-vulnerability, never finding, issue, or weakness, and say machine, never device, host,
-endpoint, or asset. Refer to machines
-and vulnerabilities only with their placeholders. Never claim a network, machine, or
-service is safe or secure. Do not use markdown, HTML, URLs, raw IP or MAC addresses,
-or the banned style words in the schema instructions. Return only the requested JSON.
-"""
+WRITING_SKILL_VERSION = "3"
 
 _URL_PATTERN = re.compile(r"(?:https?://|www\.)\S+", re.IGNORECASE)
 _HTML_PATTERN = re.compile(r"<[/!]?[a-z][^>]*>", re.IGNORECASE)
@@ -100,27 +95,51 @@ class WritingStyleViolation(ValueError):
 
 
 def lint_provider_analysis(analysis: ProviderScanAIAnalysis) -> None:
-    _lint_prose(analysis)
+    _lint_fields(_prose_fields(analysis))
 
 
 def lint_provider_child_analysis(analysis: ProviderScanAIChildAnalysis) -> None:
-    _lint_prose(analysis)
+    _lint_fields(_prose_fields(analysis))
 
 
-def _lint_prose(
-    analysis: ProviderScanAIAnalysis | ProviderScanAIChildAnalysis,
-) -> None:
+def scan_explanation_violations(explanation: ScanExplanation) -> list[str]:
+    fields = [("in_short", explanation.in_short, 300)]
+    for index, point in enumerate(explanation.meanings):
+        fields.extend(
+            [
+                (f"meanings[{index}].lead", point.lead, 80),
+                (f"meanings[{index}].text", point.text, 200),
+            ]
+        )
+    fields.extend(
+        (f"not_seen[{index}]", item, 200)
+        for index, item in enumerate(explanation.not_seen)
+    )
+    return _field_violations(fields)
+
+
+def machine_explanation_violations(explanation: MachineExplanation) -> list[str]:
+    return _field_violations(
+        [
+            ("what_it_is", explanation.what_it_is, 200),
+            ("problems", explanation.problems, 240),
+        ]
+    )
+
+
+def _lint_fields(fields: list[tuple[str, str, int]]) -> None:
+    violations = _field_violations(fields)
+    if violations:
+        raise WritingStyleViolation(violations)
+
+
+def _field_violations(fields: list[tuple[str, str, int]]) -> list[str]:
     violations: list[str] = []
-    prose = list(_prose_fields(analysis))
-    for field, value, limit in prose:
+    for field, value, limit in fields:
         if len(value) > limit:
             violations.append(f"{field}:too_long")
         violations.extend(_text_violations(field, value))
-
-    if len(analysis.uncertainties) > 3:
-        violations.append("uncertainties:too_many")
-    if violations:
-        raise WritingStyleViolation(violations)
+    return violations
 
 
 def _prose_fields(
@@ -128,60 +147,25 @@ def _prose_fields(
 ) -> list[tuple[str, str, int]]:
     values: list[tuple[str, str, int]] = []
     if isinstance(analysis, ProviderScanAIAnalysis):
+        values.append(("summary", analysis.summary, 280))
+        if analysis.not_checked is not None:
+            values.append(("not_checked", analysis.not_checked, 200))
+    for index, task in enumerate(analysis.tasks):
+        values.append((f"tasks[{index}].title", task.title, 60))
+        values.extend(
+            (f"tasks[{index}].steps[{step_index}]", step, 160)
+            for step_index, step in enumerate(task.steps)
+        )
+        if task.fallback is not None:
+            values.append((f"tasks[{index}].fallback", task.fallback, 160))
+    for index, note in enumerate(analysis.findings):
         values.extend(
             [
-                ("executive_summary", analysis.executive_summary, 280),
-                ("overall_assessment", analysis.overall_assessment, 280),
-                ("plain_language_summary", analysis.plain_language_summary, 280),
+                (f"findings[{index}].plain_title", note.plain_title, 90),
+                (f"findings[{index}].cause", note.cause, 160),
+                (f"findings[{index}].what_could_happen", note.what_could_happen, 160),
             ]
         )
-    for index, action in enumerate(analysis.priority_actions):
-        values.extend(
-            [
-                (f"priority_actions[{index}].title", action.title, 60),
-                (f"priority_actions[{index}].description", action.description, 220),
-            ]
-        )
-    for index, explanation in enumerate(analysis.important_findings):
-        values.extend(
-            [
-                (
-                    f"important_findings[{index}].why_it_matters",
-                    explanation.why_it_matters,
-                    180,
-                ),
-                (
-                    f"important_findings[{index}].plain_language_explanation",
-                    explanation.plain_language_explanation,
-                    180,
-                ),
-                (
-                    f"important_findings[{index}].recommendation",
-                    explanation.recommendation,
-                    180,
-                ),
-            ]
-        )
-        values.extend(
-            (
-                f"important_findings[{index}].evidence_used[{evidence_index}]",
-                evidence,
-                180,
-            )
-            for evidence_index, evidence in enumerate(explanation.evidence_used)
-        )
-        if explanation.uncertainty is not None:
-            values.append(
-                (
-                    f"important_findings[{index}].uncertainty",
-                    explanation.uncertainty,
-                    160,
-                )
-            )
-    values.extend(
-        (f"uncertainties[{index}]", uncertainty, 160)
-        for index, uncertainty in enumerate(analysis.uncertainties)
-    )
     return values
 
 

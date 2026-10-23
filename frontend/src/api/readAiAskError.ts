@@ -14,7 +14,9 @@ export function readAiAskError(error: unknown, fallback: string): string {
   const apiError = readApiError(error)
   if (
     apiError?.message &&
-    ['ai_rate_limited', 'ai_context_too_large'].includes(apiError.code ?? '')
+    ['ai_rate_limited', 'ai_daily_limit', 'ai_context_too_large'].includes(
+      apiError.code ?? '',
+    )
   ) {
     return apiError.message
   }

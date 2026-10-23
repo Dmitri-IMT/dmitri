@@ -5,12 +5,18 @@ from uuid import uuid4
 
 import api.services.worker as worker_module
 import pytest
+from ai_shapes import (
+    child_analysis,
+    empty_analysis,
+    provider_analysis,
+    provider_note,
+    provider_task,
+)
 from api.models.persistence import AIScanAnalysisRecord, EnrichmentJobRecord, KevRecord
 from api.schemas.ai import (
-    AIProviderFindingExplanation,
-    AIProviderRecommendedAction,
+    ProviderCVEFixResearch,
+    ProviderFixOption,
     ProviderScanAIAnalysis,
-    ProviderScanAIChildAnalysis,
 )
 from api.schemas.read import (
     FindingEvidenceConfidenceCounts,
@@ -20,8 +26,12 @@ from api.schemas.read import (
 )
 from api.services.ai.analyzer import validate_analysis_with_repair
 from api.services.ai.context import AIFindingContext, ScanAIContext
-from api.services.ai.groq import AIProviderError
-from api.services.ai.jobs import process_ready_ai_analyses
+from api.services.ai.jobs import (
+    process_ready_ai_analyses,
+    scan_ai_analysis_response,
+)
+from api.services.ai.openai_responses import AIProviderError
+from api.services.ai.validation import KEV_TASK_ERROR
 from api.services.worker import run_ai_worker_once
 from pydantic import ValidationError
 from read_factories import (
@@ -35,40 +45,12 @@ from sqlmodel import select
 
 
 def _analysis() -> ProviderScanAIAnalysis:
-    return ProviderScanAIAnalysis(
-        executive_summary="Nenhum risco prioritário foi identificado.",
-        overall_assessment="O scan não apresentou findings para priorização.",
-        plain_language_summary="Nada urgente apareceu neste resultado.",
-        priority_actions=[],
-        important_findings=[],
-        uncertainties=["A ausência de findings não comprova ausência de risco."],
-    )
+    return empty_analysis()
 
 
 def _grounded_analysis(finding_ref: str = "finding_1") -> ProviderScanAIAnalysis:
-    return ProviderScanAIAnalysis(
-        executive_summary="One vulnerability needs attention.",
-        overall_assessment="The observed risk is high but limited in scope.",
-        plain_language_summary="One exposed service should be reviewed soon.",
-        priority_actions=[
-            AIProviderRecommendedAction(
-                priority="high",
-                title="Review the affected service",
-                description="Ask a qualified professional to validate the service.",
-                related_finding_refs=[finding_ref],
-            )
-        ],
-        important_findings=[
-            AIProviderFindingExplanation(
-                finding_ref=finding_ref,
-                why_it_matters="The service is exposed and has a high risk score.",
-                plain_language_explanation="An exposed service may need an update.",
-                recommendation="Have a professional validate and update it.",
-                evidence_used=["NVD validated the supplied CVE."],
-                uncertainty=None,
-            )
-        ],
-        uncertainties=[],
+    return provider_analysis(
+        tasks=[provider_task(finding_ref)], findings=[provider_note(finding_ref)]
     )
 
 
@@ -165,12 +147,10 @@ def test_requested_ai_job_runs_once_after_enrichment_is_terminal(
     assert record.scan_id == scan.scan_id
     assert record.status == "completed"
     assert record.analysis_json == {
-        "executive_summary": _analysis().executive_summary,
-        "overall_assessment": _analysis().overall_assessment,
-        "plain_language_summary": _analysis().plain_language_summary,
-        "priority_actions": [],
-        "important_findings": [],
-        "uncertainties": _analysis().uncertainties,
+        "summary": _analysis().summary,
+        "tasks": [],
+        "findings": [],
+        "not_checked": None,
     }
     assert record.context_hash is not None and len(record.context_hash) == 64
     assert record.analyzed_findings == 0
@@ -196,9 +176,12 @@ def test_grounded_analysis_completes(administrative_session):
 
     record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
     assert record.status == "completed"
-    assert record.analysis_json["important_findings"][0]["finding_id"] == str(
+    assert record.analysis_json["findings"][0]["finding_id"] == str(
         finding.finding_id
     )
+    assert record.analysis_json["tasks"][0]["finding_ids"] == [
+        str(finding.finding_id)
+    ]
     assert received[0].top_findings[0].finding_ref == "finding_1"
 
 
@@ -212,6 +195,10 @@ def test_bounded_job_records_failed_child_coverage(administrative_session):
         )
     _pending_analysis(administrative_session, scan)
     calls = []
+    progress = []
+
+    def _record():
+        return administrative_session.exec(select(AIScanAnalysisRecord)).one()
 
     class BoundedProvider:
         def analyze_scan(self, context, *, language="en"):
@@ -222,11 +209,10 @@ def test_bounded_job_records_failed_child_coverage(administrative_session):
 
         def analyze_chunk(self, context, *, language="en"):
             calls.append([item.finding_ref for item in context.top_findings])
+            progress.append(scan_ai_analysis_response(_record()).progress)
             if len(context.top_findings) == 5:
                 raise AIProviderError("provider_timeout", retryable=True)
-            return ProviderScanAIChildAnalysis(
-                priority_actions=[], important_findings=[], uncertainties=[]
-            )
+            return child_analysis()
 
         def repair_chunk(self, context, violation_codes, *, language="en"):
             raise AssertionError("no repair expected")
@@ -236,6 +222,7 @@ def test_bounded_job_records_failed_child_coverage(administrative_session):
         ):
             assert len(child_results) == 1
             assert len(failed_refs) == 5
+            progress.append(scan_ai_analysis_response(_record()).progress)
             return _analysis()
 
     assert _run(
@@ -247,6 +234,10 @@ def test_bounded_job_records_failed_child_coverage(administrative_session):
     assert record.analyzed_findings == 1
     assert record.failed_findings == 5
     assert record.total_findings == 6
+    assert [
+        (item.stage, item.done, item.total) for item in progress
+    ] == [("groups", 0, 2), ("groups", 1, 2), ("summary", 2, 2)]
+    assert scan_ai_analysis_response(record).status == "completed"
 
 
 def test_unknown_provider_reference_is_repaired_before_materialization(
@@ -287,11 +278,11 @@ def test_ungrounded_analysis_fails(administrative_session, defect):
     _pending_analysis(administrative_session, scan)
     analysis = _grounded_analysis()
     if defect == "invented_explanation":
-        analysis.important_findings[0].finding_ref = "finding_99"
+        analysis.findings[0].finding_ref = "finding_99"
     elif defect == "invented_action":
-        analysis.priority_actions[0].related_finding_refs = ["finding_99"]
+        analysis.tasks[0].fixes = ["finding_99"]
     else:
-        analysis.important_findings.append(analysis.important_findings[0])
+        analysis.findings.append(analysis.findings[0])
 
     class FakeProvider:
         def analyze_scan(self, context, language="en"):
@@ -416,7 +407,7 @@ def test_style_violation_is_repaired_once(administrative_session):
     scan, _ = _scan_with_finding(administrative_session)
     _pending_analysis(administrative_session, scan)
     rejected = _grounded_analysis()
-    rejected.executive_summary = "Your network is safe."
+    rejected.summary = "Your network is safe."
     repaired = _grounded_analysis()
     received_codes = []
 
@@ -438,10 +429,10 @@ def test_style_violation_is_repaired_once(administrative_session):
     )
     record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
     assert record.status == "completed"
-    assert "executive_summary:safety_certification" in received_codes
+    assert "summary:safety_certification" in received_codes
 
 
-def test_style_repair_missing_kev_fails_without_local_actions(
+def test_style_repair_missing_kev_fails_without_local_tasks(
     administrative_session,
 ):
     scan, finding = _scan_with_finding(administrative_session)
@@ -452,9 +443,9 @@ def test_style_repair_missing_kev_fails_without_local_actions(
     _pending_analysis(administrative_session, scan, language="pt-BR")
 
     rejected = _grounded_analysis()
-    rejected.executive_summary = "Your network is safe."
+    rejected.summary = "Your network is safe."
     repaired = _grounded_analysis()
-    repaired.priority_actions = []
+    repaired.tasks = []
     calls = []
 
     class RepairingProvider:
@@ -479,10 +470,10 @@ def test_style_repair_missing_kev_fails_without_local_actions(
     assert record.last_error == "invalid_analysis"
     assert record.analysis_json is None
     assert calls == [("analysis", "pt-BR"), ("repair", "pt-BR")]
-    assert repaired.priority_actions == []
+    assert repaired.tasks == []
 
 
-def test_style_repair_missing_kev_preserves_full_action_list(
+def test_style_repair_missing_kev_preserves_full_task_list(
     administrative_session,
 ):
     scan, finding = _scan_with_finding(administrative_session)
@@ -493,16 +484,11 @@ def test_style_repair_missing_kev_preserves_full_action_list(
     _pending_analysis(administrative_session, scan)
 
     rejected = _grounded_analysis()
-    rejected.executive_summary = "Your network is safe."
+    rejected.summary = "Your network is safe."
     repaired = _grounded_analysis()
-    repaired.priority_actions = [
-        AIProviderRecommendedAction(
-            priority="low",
-            title=f"Review item {index:02d}",
-            description="Ask a qualified professional to check this item.",
-            related_finding_refs=[],
-        )
-        for index in range(15)
+    repaired.tasks = [
+        provider_task("finding_2", title=f"Review item {index:02d}")
+        for index in range(10)
     ]
 
     class RepairingProvider:
@@ -524,8 +510,8 @@ def test_style_repair_missing_kev_preserves_full_action_list(
     assert record.status == "failed"
     assert record.last_error == "invalid_analysis"
     assert record.analysis_json is None
-    assert [action.title for action in repaired.priority_actions] == [
-        f"Review item {index:02d}" for index in range(15)
+    assert [task.title for task in repaired.tasks] == [
+        f"Review item {index:02d}" for index in range(10)
     ]
 
 
@@ -533,7 +519,7 @@ def test_second_style_violation_fails_the_job(administrative_session):
     scan, _ = _scan_with_finding(administrative_session)
     _pending_analysis(administrative_session, scan)
     rejected = _grounded_analysis()
-    rejected.executive_summary = "Your network is safe."
+    rejected.summary = "Your network is safe."
 
     class InvalidRepairProvider:
         def analyze_scan(self, context, language="en"):
@@ -555,7 +541,7 @@ def test_second_style_violation_fails_the_job(administrative_session):
     assert record.last_error == "style_violation"
 
 
-def test_missing_kev_action_is_repaired_before_analysis_is_rejected():
+def test_missing_kev_task_is_repaired_before_analysis_is_rejected():
     context = ScanAIContext(
         scan_mode="quick",
         duration_seconds=1,
@@ -617,8 +603,8 @@ def test_missing_kev_action_is_repaired_before_analysis_is_rejected():
         RepairingProvider(), context, missing_action, language="en"
     )
 
-    assert validated.priority_actions[0].related_finding_refs == ["finding_1"]
-    assert "analysis omits a KEV finding from actions" in received_codes
+    assert validated.tasks[0].fixes == ["finding_1"]
+    assert KEV_TASK_ERROR in received_codes
 
 
 def test_retry_waits_for_configured_delay(administrative_session):
@@ -724,3 +710,45 @@ def test_run_ai_worker_loop_skips_provider_when_ai_unavailable(monkeypatch):
 
     worker_module.run_ai_worker_loop()
     assert poll_calls == []
+
+
+def test_job_researches_fixes_before_analysis(administrative_session):
+    scan, finding = _scan_with_finding(administrative_session)
+    finding.cve_id = "CVE-2026-0001"
+    administrative_session.add(finding)
+    administrative_session.commit()
+    _pending_analysis(administrative_session, scan)
+    seen = []
+
+    class ResearchingProvider:
+        def research_fix(self, target):
+            return (
+                ProviderCVEFixResearch(
+                    version_affected="yes",
+                    options=[
+                        ProviderFixOption(
+                            effort="update",
+                            who="it_person",
+                            steps=["Install the vendor update."],
+                            fixed_version="2.0",
+                            fixes_fully=True,
+                            source_name="Vendor advisory",
+                            source_url="https://vendor.example.com/advisory",
+                        )
+                    ],
+                ),
+                {"https://vendor.example.com/advisory"},
+            )
+
+        def analyze_scan(self, context, language="en"):
+            seen.append(context.top_findings[0].fix_options)
+            return _grounded_analysis()
+
+        def repair_analysis(self, context, violation_codes, language="en"):
+            return _grounded_analysis()
+
+    _run(administrative_session, ResearchingProvider(), now=datetime.now(timezone.utc))
+
+    record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
+    assert record.status == "completed"
+    assert [option.source_name for option in seen[0]] == ["Vendor advisory"]

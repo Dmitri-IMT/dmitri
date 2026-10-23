@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import DataTable from '@/components/DataTable'
-import FindingPanel, { ScanFindingPanel } from '@/pages/scans/FindingPanel'
+import VulnerabilityView from '@/components/VulnerabilityView'
 import useI18n from '@/i18n/useI18n'
 import {
   hostFindingColumns,
@@ -67,12 +67,7 @@ function FindingsTable({
       rows={[...findings].sort(bySeverityDesc)}
       rowAction={{
         kind: 'expand',
-        panel: (finding) =>
-          variant === 'scan' ? (
-            <ScanFindingPanel finding={finding} />
-          ) : (
-            <FindingPanel finding={finding} />
-          ),
+        panel: (finding) => <VulnerabilityView finding={finding} />,
         label: (finding) =>
           t('common.showFindingDetails', { title: finding.title }),
         openRowId: openFindingId,

@@ -4,7 +4,7 @@ description: >-
   Per-task review gate in the orchestration loop for frontend/ features. Reviews a coder +
   frontend-test-engineer's work against the TASKS.md success criteria and the specs, runs the
   npm lint/format/typecheck/test/build gate on the scope, and returns [APPROVE] or [REJECT] on
-  the first line. Spawned by the feature-orchestrator; this is the authoritative gate for React
+  the first line. Spawned for one TASKS.md task; this is the authoritative gate for React
   work — the Python code-reviewer handles hardware-agent/ and backend/.
 readonly: false
 ---

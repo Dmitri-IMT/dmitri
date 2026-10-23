@@ -68,7 +68,7 @@ def page_attention(
     ).all()
 
     return HomeAttentionPage(
-        data=read.to_finding_reads(rows),
+        data=read.to_finding_reads(session, rows),
         total=total,
         page=page,
     )

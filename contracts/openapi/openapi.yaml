@@ -559,78 +559,247 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/ai/chat/history:
+  /api/v1/ai/chat/conversations:
     get:
-      tags:
-        - ai
-      summary: List contextual AI chat history
-      operationId: listContextAIChat
+      summary: List Context Conversations
+      operationId: listAIConversations
       security:
-        - FrontendBearerAuth: []
+      - FrontendBearerAuth: []
       parameters:
-        - name: scope
-          in: query
-          required: true
-          schema:
-            type: string
-            enum: [scan, host, finding]
-        - name: context_id
-          in: query
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Last ten questions for the selected context.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AIChatHistoryResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /api/v1/ai/chat:
-    post:
-      tags:
-        - ai
-      summary: Ask the contextual AI assistant
-      operationId: askContextAI
-      security:
-        - FrontendBearerAuth: []
-      requestBody:
+      - name: scope
+        in: query
         required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AIContextChatRequest'
+        schema:
+          type: string
+          pattern: ^(scan|host|finding)$
+          title: Scope
+      - name: context_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Context Id
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
       responses:
         '200':
-          description: Grounded answer for the selected context.
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AIChatResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '413':
-          description: Context exceeds the provider limit.
+                $ref: '#/components/schemas/AIConversationsResponse'
+        '422':
+          description: Validation error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      tags:
+      - ai
+  /api/v1/ai/chat/history:
+    get:
+      summary: List Context Chat
+      operationId: listContextAIChat
+      security:
+      - FrontendBearerAuth: []
+      parameters:
+      - name: scope
+        in: query
+        required: true
+        schema:
+          type: string
+          pattern: ^(scan|host|finding)$
+          title: Scope
+      - name: context_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Context Id
+      - name: conversation_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Conversation Id
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIChatHistoryResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      tags:
+      - ai
+  /api/v1/ai/explain:
+    post:
+      summary: Explain Context
+      operationId: explainAIContext
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIExplainRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - $ref: '#/components/schemas/ScanExplanationResponse'
+                - $ref: '#/components/schemas/MachineExplanationResponse'
+                title: Response Explainaicontext
+                discriminator:
+                  propertyName: scope
+                  mapping:
+                    scan: '#/components/schemas/ScanExplanationResponse'
+                    host: '#/components/schemas/MachineExplanationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '429':
-          description: AI provider rate limit reached.
+          description: Daily question limit or provider rate limit reached.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '502':
-          $ref: '#/components/responses/InternalServerError'
-
+          description: Provider or explanation validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: The AI assistant is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - FrontendBearerAuth: []
+      tags:
+      - ai
+  /api/v1/ai/chat:
+    post:
+      summary: Ask Context Chat
+      operationId: askContextAI
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIContextChatRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIChatHistoryEntry'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Context too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Provider error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: AI unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - FrontendBearerAuth: []
+      tags:
+      - ai
   /api/v1/scans/{scan_id}/reports/{kind}/download:
     get:
       tags:
@@ -6353,6 +6522,27 @@ components:
           type: integer
           minimum: 1
           maximum: 65535
+    RiskBreakdown:
+      type: object
+      additionalProperties: false
+      required: [severity, likelihood, confidence, reachable]
+      properties:
+        severity:
+          type: number
+          minimum: 0
+          maximum: 45
+        likelihood:
+          type: number
+          minimum: 0
+          maximum: 35
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 15
+        reachable:
+          type: number
+          minimum: 0
+          maximum: 5
     FindingRecord:
       type: object
       additionalProperties: false
@@ -6378,6 +6568,22 @@ components:
           type: [string, 'null']
           enum: [tentative, probable, confirmed, null]
         risk_rationale:
+          type: [string, 'null']
+        risk_breakdown:
+          anyOf:
+            - $ref: '#/components/schemas/RiskBreakdown'
+            - type: 'null'
+        epss_score:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 1
+        kev_listed:
+          type: boolean
+        known_ransomware:
+          type: boolean
+        product:
+          type: [string, 'null']
+        version:
           type: [string, 'null']
         finding_id:
           type: string
@@ -6597,15 +6803,38 @@ components:
           maxItems: 10
           items:
             $ref: '#/components/schemas/FindingRecord'
-    AIRecommendedAction:
+    AISourceLink:
+      type: object
+      additionalProperties: false
+      required: [name, url]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 200
+        url:
+          type: string
+          minLength: 8
+          maxLength: 2000
+    AIFixTask:
       type: object
       additionalProperties: false
       required:
+        - rank
         - priority
         - title
-        - description
-        - related_finding_ids
+        - who
+        - time
+        - steps
+        - fallback
+        - fixes_fully
+        - finding_ids
+        - highest_risk_score
+        - sources
       properties:
+        rank:
+          type: integer
+          minimum: 1
         priority:
           type: string
           enum: [immediate, high, medium, low]
@@ -6613,93 +6842,95 @@ components:
           type: string
           minLength: 3
           maxLength: 200
-        description:
+        who:
           type: string
-          minLength: 3
-          maxLength: 2000
-        related_finding_ids:
+          enum: [owner, it_person, vendor]
+        time:
+          type: string
+          enum: [5_minutes, 30_minutes, 1_hour, half_day, 1_day, longer]
+        steps:
           type: array
+          minItems: 1
+          maxItems: 3
+          items:
+            type: string
+            minLength: 3
+            maxLength: 600
+        fallback:
+          type: [string, 'null']
+          maxLength: 600
+        fixes_fully:
+          type: boolean
+        finding_ids:
+          type: array
+          minItems: 1
           maxItems: 15
           items:
             type: string
             format: uuid
-    AIFindingExplanation:
+        highest_risk_score:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 100
+        sources:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/AISourceLink'
+    AIFindingNote:
       type: object
       additionalProperties: false
       required:
         - finding_id
-        - why_it_matters
-        - plain_language_explanation
-        - recommendation
-        - evidence_used
-        - uncertainty
+        - plain_title
+        - cause
+        - what_could_happen
+        - task_rank
       properties:
         finding_id:
           type: string
           format: uuid
-        why_it_matters:
+        plain_title:
           type: string
           minLength: 3
-          maxLength: 2000
-        plain_language_explanation:
+          maxLength: 400
+        cause:
           type: string
           minLength: 3
-          maxLength: 2000
-        recommendation:
+          maxLength: 600
+        what_could_happen:
           type: string
           minLength: 3
-          maxLength: 2000
-        evidence_used:
-          type: array
-          maxItems: 10
-          items:
-            type: string
-            minLength: 3
-            maxLength: 2000
-        uncertainty:
-          type: [string, 'null']
-          minLength: 3
-          maxLength: 1000
+          maxLength: 600
+        task_rank:
+          type: [integer, 'null']
+          minimum: 1
     ScanAIAnalysis:
       type: object
       additionalProperties: false
       required:
-        - executive_summary
-        - overall_assessment
-        - plain_language_summary
-        - priority_actions
-        - important_findings
-        - uncertainties
+        - summary
+        - tasks
+        - findings
+        - not_checked
       properties:
-        executive_summary:
+        summary:
           type: string
           minLength: 3
           maxLength: 4000
-        overall_assessment:
-          type: string
-          minLength: 3
-          maxLength: 4000
-        plain_language_summary:
-          type: string
-          minLength: 3
-          maxLength: 4000
-        priority_actions:
+        tasks:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/AIFixTask'
+        findings:
           type: array
           maxItems: 15
           items:
-            $ref: '#/components/schemas/AIRecommendedAction'
-        important_findings:
-          type: array
-          maxItems: 15
-          items:
-            $ref: '#/components/schemas/AIFindingExplanation'
-        uncertainties:
-          type: array
-          maxItems: 20
-          items:
-            type: string
-            minLength: 3
-            maxLength: 2000
+            $ref: '#/components/schemas/AIFindingNote'
+        not_checked:
+          type: [string, 'null']
+          maxLength: 600
     ScanAIAnalysisResponse:
       oneOf:
         - $ref: '#/components/schemas/ScanAIAnalysisUnavailable'
@@ -7456,72 +7687,111 @@ components:
       - sections
       title: ScanReportResponse
     AIContextChatRequest:
-      type: object
-      additionalProperties: false
-      required: [question, scope, context_id]
       properties:
         question:
           type: string
-          minLength: 3
           maxLength: 1000
+          minLength: 3
+          title: Question
         language:
           type: string
-          enum: [en, pt-BR, ru]
+          enum:
+          - en
+          - pt-BR
+          - ru
+          title: Language
           default: en
         scope:
           type: string
-          enum: [scan, host, finding]
+          enum:
+          - scan
+          - host
+          - finding
+          title: Scope
         context_id:
           type: string
           format: uuid
-    AIChatResponse:
-      type: object
+          title: Context Id
+        conversation_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Conversation Id
       additionalProperties: false
-      required: [answer, uncertainties, referenced_finding_ids]
+      type: object
+      required:
+      - question
+      - scope
+      - context_id
+      title: AIContextChatRequest
+      description: Question addressed to a reusable UI context (scan, host or finding).
+    AIChatHistoryEntry:
       properties:
         answer:
           type: string
+          maxLength: 8000
           minLength: 3
-          maxLength: 4000
+          title: Answer
         uncertainties:
-          type: array
-          maxItems: 10
           items:
             type: string
-            minLength: 3
             maxLength: 2000
-        referenced_finding_ids:
+            minLength: 3
           type: array
-          maxItems: 15
+          maxItems: 10
+          title: Uncertainties
+        referenced_finding_ids:
           items:
             type: string
             format: uuid
-    AIChatHistoryEntry:
-      allOf:
-        - $ref: '#/components/schemas/AIChatResponse'
-        - type: object
-          additionalProperties: false
-          required: [message_id, question, created_at]
-          properties:
-            message_id:
-              type: string
-              format: uuid
-            question:
-              type: string
-              minLength: 3
-              maxLength: 2000
-            created_at:
-              type: string
-              format: date-time
-    AIChatHistoryResponse:
-      type: object
+          type: array
+          maxItems: 15
+          title: Referenced Finding Ids
+        message_id:
+          type: string
+          format: uuid
+          title: Message Id
+        conversation_id:
+          type: string
+          format: uuid
+          title: Conversation Id
+        question:
+          type: string
+          maxLength: 2000
+          minLength: 3
+          title: Question
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
       additionalProperties: false
-      required: [data]
+      type: object
+      required:
+      - answer
+      - uncertainties
+      - referenced_finding_ids
+      - message_id
+      - conversation_id
+      - question
+      - created_at
+      title: AIChatHistoryEntry
+    AIChatHistoryResponse:
       properties:
         data:
-          type: array
           items:
             $ref: '#/components/schemas/AIChatHistoryEntry'
+          type: array
+          title: Data
+        has_more:
+          type: boolean
+          title: Has More
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - data
+      title: AIChatHistoryResponse
     AIUsageEntry:
       type: object
       additionalProperties: false
@@ -7669,6 +7939,24 @@ components:
         status:
           type: string
           enum: [pending, processing]
+        progress:
+          anyOf:
+            - $ref: '#/components/schemas/ScanAIAnalysisProgress'
+            - type: 'null'
+    ScanAIAnalysisProgress:
+      type: object
+      additionalProperties: false
+      required: [stage, done, total]
+      properties:
+        stage:
+          type: string
+          enum: [fixes, groups, summary]
+        done:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
     ScanAIAnalysisFailed:
       type: object
       additionalProperties: false
@@ -8149,6 +8437,197 @@ components:
       properties:
         error:
           $ref: '#/components/schemas/ErrorBody'
+
+    AIExplainRequest:
+      properties:
+        scope:
+          type: string
+          enum:
+          - scan
+          - host
+          title: Scope
+        context_id:
+          type: string
+          format: uuid
+          title: Context Id
+        language:
+          type: string
+          enum:
+          - en
+          - pt-BR
+          - ru
+          title: Language
+          default: en
+      additionalProperties: false
+      type: object
+      required:
+      - scope
+      - context_id
+      title: AIExplainRequest
+    ExplanationPoint:
+      properties:
+        lead:
+          type: string
+          maxLength: 200
+          minLength: 3
+          title: Lead
+        text:
+          type: string
+          maxLength: 600
+          minLength: 3
+          title: Text
+      additionalProperties: false
+      type: object
+      required:
+      - lead
+      - text
+      title: ExplanationPoint
+    ScanExplanation:
+      properties:
+        in_short:
+          type: string
+          maxLength: 1000
+          minLength: 3
+          title: In Short
+        meanings:
+          items:
+            $ref: '#/components/schemas/ExplanationPoint'
+          type: array
+          maxItems: 4
+          title: Meanings
+        not_seen:
+          items:
+            type: string
+            maxLength: 600
+            minLength: 3
+          type: array
+          maxItems: 4
+          title: Not Seen
+      additionalProperties: false
+      type: object
+      required:
+      - in_short
+      - meanings
+      - not_seen
+      title: ScanExplanation
+    MachineExplanation:
+      properties:
+        what_it_is:
+          type: string
+          maxLength: 600
+          minLength: 3
+          title: What It Is
+        problems:
+          type: string
+          maxLength: 600
+          minLength: 3
+          title: Problems
+      additionalProperties: false
+      type: object
+      required:
+      - what_it_is
+      - problems
+      title: MachineExplanation
+    ScanExplanationResponse:
+      properties:
+        context_id:
+          type: string
+          format: uuid
+          title: Context Id
+        language:
+          type: string
+          enum:
+          - en
+          - pt-BR
+          - ru
+          title: Language
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        scope:
+          type: string
+          const: scan
+          title: Scope
+        explanation:
+          $ref: '#/components/schemas/ScanExplanation'
+      additionalProperties: false
+      type: object
+      required:
+      - context_id
+      - language
+      - created_at
+      - scope
+      - explanation
+      title: ScanExplanationResponse
+    MachineExplanationResponse:
+      properties:
+        context_id:
+          type: string
+          format: uuid
+          title: Context Id
+        language:
+          type: string
+          enum:
+          - en
+          - pt-BR
+          - ru
+          title: Language
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        scope:
+          type: string
+          const: host
+          title: Scope
+        explanation:
+          $ref: '#/components/schemas/MachineExplanation'
+      additionalProperties: false
+      type: object
+      required:
+      - context_id
+      - language
+      - created_at
+      - scope
+      - explanation
+      title: MachineExplanationResponse
+
+    AIConversationSummary:
+      properties:
+        conversation_id:
+          type: string
+          format: uuid
+          title: Conversation Id
+        title:
+          type: string
+          title: Title
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      type: object
+      required:
+      - conversation_id
+      - title
+      - updated_at
+      title: AIConversationSummary
+
+    AIConversationsResponse:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/AIConversationSummary'
+          type: array
+          title: Data
+        has_more:
+          type: boolean
+          title: Has More
+      type: object
+      required:
+      - data
+      - has_more
+      title: AIConversationsResponse
     McpAuthorizationView:
       properties:
         client_name:

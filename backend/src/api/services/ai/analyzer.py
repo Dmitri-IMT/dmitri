@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from api.schemas.ai import (
@@ -7,7 +8,7 @@ from api.schemas.ai import (
     ProviderScanAIChildAnalysis,
 )
 from api.services.ai.context import ScanAIContext
-from api.services.ai.groq import AIProviderError
+from api.services.ai.openai_responses import AIProviderError
 from api.services.ai.providers import (
     BoundedScanAnalysisProvider,
     ScanAnalysisProvider,
@@ -40,6 +41,7 @@ def run_bounded_analysis(
     *,
     child_findings: int = DEFAULT_CHILD_FINDINGS,
     language: str = "en",
+    on_progress: Callable[[str, int, int], None] | None = None,
 ) -> tuple[ProviderScanAIAnalysis, AnalysisCoverage]:
     """Run isolated finding chunks, then synthesize only validated child output."""
     if child_findings < 1:
@@ -58,7 +60,9 @@ def run_bounded_analysis(
     children: list[dict[str, object]] = []
     failed_refs: list[str] = []
     analyzed = 0
-    for chunk in chunks:
+    for index, chunk in enumerate(chunks):
+        if on_progress is not None:
+            on_progress("groups", index, len(chunks))
         refs = [finding.finding_ref for finding in chunk.top_findings]
         try:
             child = _run_child(provider, chunk, language=language)
@@ -73,6 +77,8 @@ def run_bounded_analysis(
         children.append(child.model_dump(mode="json"))
         analyzed += len(refs)
 
+    if on_progress is not None:
+        on_progress("summary", len(chunks), len(chunks))
     synthesis = provider.synthesize_scan(
         context, children, tuple(failed_refs), language=language
     )
@@ -176,10 +182,8 @@ def _validate_references(
     analysis: ProviderScanAIAnalysis | ProviderScanAIChildAnalysis,
 ) -> None:
     allowed = {finding.finding_ref for finding in context.top_findings}
-    explained = [item.finding_ref for item in analysis.important_findings]
-    referenced = set(explained).union(
-        *(action.related_finding_refs for action in analysis.priority_actions)
-    )
+    explained = [item.finding_ref for item in analysis.findings]
+    referenced = set(explained).union(*(task.fixes for task in analysis.tasks))
     if not referenced <= allowed:
         raise AIAnalysisValidationError("analysis contains an unknown reference")
     if len(explained) != len(set(explained)):

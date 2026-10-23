@@ -12,6 +12,7 @@ from api.models.command import Command
 from api.models.identity import User
 from api.models.persistence import (
     AIChatMessageRecord,
+    AIExplanationRecord,
     AIScanAnalysisRecord,
     AIUsageRecord,
     CPERecord,
@@ -190,6 +191,9 @@ def _delete_scans(session: Session, scan_ids: list[UUID], *, org_id: UUID) -> in
         delete(AIChatMessageRecord).where(AIChatMessageRecord.scan_id.in_(scan_ids))
     )
     session.execute(
+        delete(AIExplanationRecord).where(AIExplanationRecord.scan_id.in_(scan_ids))
+    )
+    session.execute(
         delete(AIScanAnalysisRecord).where(AIScanAnalysisRecord.scan_id.in_(scan_ids))
     )
     session.execute(
@@ -227,6 +231,12 @@ def _delete_hosts(session: Session, host_ids: Collection[UUID]) -> None:
                     AIChatMessageRecord.scope_id.in_(finding_ids),
                 ),
             )
+        )
+    )
+    session.execute(
+        delete(AIExplanationRecord).where(
+            AIExplanationRecord.scope == "host",
+            AIExplanationRecord.context_id.in_(host_ids),
         )
     )
     session.execute(delete(HostPortRecord).where(HostPortRecord.host_id.in_(host_ids)))

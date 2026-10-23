@@ -24,18 +24,20 @@ class AIContextChatRequest(AIChatRequest):
 
     scope: Literal["scan", "host", "finding"]
     context_id: UUID
+    conversation_id: UUID | None = None
 
 
 class AIChatResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    answer: AIText
+    answer: Annotated[str, Field(min_length=3, max_length=8000)]
     uncertainties: Annotated[list[AIShortText], Field(max_length=10)]
     referenced_finding_ids: Annotated[list[UUID], Field(max_length=15)]
 
 
 class AIChatHistoryEntry(AIChatResponse):
     message_id: UUID
+    conversation_id: UUID
     question: AIShortText
     created_at: datetime
 
@@ -44,6 +46,18 @@ class AIChatHistoryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     data: list[AIChatHistoryEntry]
+    has_more: bool = False
+
+
+class AIConversationSummary(BaseModel):
+    conversation_id: UUID
+    title: str
+    updated_at: datetime
+
+
+class AIConversationsResponse(BaseModel):
+    data: list[AIConversationSummary]
+    has_more: bool
 
 
 class AIUsageEntry(BaseModel):
@@ -83,78 +97,43 @@ class AIUsageResponse(BaseModel):
     data: list[AIUsageEntry]
 
 
-class ProviderAIChatResponse(BaseModel):
+FixEffort = Literal["setting_change", "update", "workaround", "replace", "ask_vendor"]
+FixActor = Literal["owner", "it_person", "vendor"]
+
+
+FixTime = Literal["5_minutes", "30_minutes", "1_hour", "half_day", "1_day", "longer"]
+TaskPriority = Literal["immediate", "high", "medium", "low"]
+AIStep = Annotated[str, Field(min_length=3, max_length=600)]
+
+
+class AIProviderFixTask(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    answer: AIText
-    uncertainties: Annotated[list[AIShortText], Field(max_length=10)]
-    referenced_finding_refs: Annotated[list[FindingReference], Field(max_length=15)]
-
-
-class AIRecommendedAction(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    priority: Literal["immediate", "high", "medium", "low"]
     title: Annotated[str, Field(min_length=3, max_length=200)]
-    description: AIShortText
-    related_finding_ids: Annotated[list[UUID], Field(max_length=15)]
+    who: FixActor
+    time: FixTime
+    steps: Annotated[list[AIStep], Field(min_length=1, max_length=3)]
+    fallback: Annotated[str, Field(max_length=600)] | None
+    fixes_fully: bool
+    fixes: Annotated[list[FindingReference], Field(min_length=1, max_length=15)]
 
 
-class AIProviderRecommendedAction(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    priority: Literal["immediate", "high", "medium", "low"]
-    title: Annotated[str, Field(min_length=3, max_length=200)]
-    description: AIShortText
-    related_finding_refs: Annotated[list[FindingReference], Field(max_length=15)]
-
-
-class AIFindingExplanation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    finding_id: UUID
-    why_it_matters: AIShortText
-    plain_language_explanation: AIShortText
-    recommendation: AIShortText
-    evidence_used: Annotated[list[AIShortText], Field(max_length=10)]
-    uncertainty: Annotated[str | None, Field(max_length=1000)]
-
-
-class AIProviderFindingExplanation(BaseModel):
+class AIProviderFindingNote(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     finding_ref: FindingReference
-    why_it_matters: AIShortText
-    plain_language_explanation: AIShortText
-    recommendation: AIShortText
-    evidence_used: Annotated[list[AIShortText], Field(max_length=10)]
-    uncertainty: Annotated[str | None, Field(max_length=1000)]
-
-
-class ScanAIAnalysis(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    executive_summary: AIText
-    overall_assessment: AIText
-    plain_language_summary: AIText
-    priority_actions: Annotated[list[AIRecommendedAction], Field(max_length=15)]
-    important_findings: Annotated[list[AIFindingExplanation], Field(max_length=15)]
-    uncertainties: Annotated[list[AIShortText], Field(max_length=20)]
+    plain_title: Annotated[str, Field(min_length=3, max_length=400)]
+    cause: Annotated[str, Field(min_length=3, max_length=600)]
+    what_could_happen: Annotated[str, Field(min_length=3, max_length=600)]
 
 
 class ProviderScanAIAnalysis(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    executive_summary: AIText
-    overall_assessment: AIText
-    plain_language_summary: AIText
-    priority_actions: Annotated[
-        list[AIProviderRecommendedAction], Field(max_length=15)
-    ]
-    important_findings: Annotated[
-        list[AIProviderFindingExplanation], Field(max_length=15)
-    ]
-    uncertainties: Annotated[list[AIShortText], Field(max_length=20)]
+    summary: AIText
+    tasks: Annotated[list[AIProviderFixTask], Field(max_length=10)]
+    findings: Annotated[list[AIProviderFindingNote], Field(max_length=15)]
+    not_checked: Annotated[str, Field(max_length=600)] | None
 
 
 class ProviderScanAIChildAnalysis(BaseModel):
@@ -162,13 +141,129 @@ class ProviderScanAIChildAnalysis(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    priority_actions: Annotated[
-        list[AIProviderRecommendedAction], Field(max_length=15)
+    tasks: Annotated[list[AIProviderFixTask], Field(max_length=10)]
+    findings: Annotated[list[AIProviderFindingNote], Field(max_length=15)]
+
+
+class AISourceLink(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: Annotated[str, Field(min_length=2, max_length=200)]
+    url: Annotated[str, Field(min_length=8, max_length=2000)]
+
+
+class AIFixTask(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rank: Annotated[int, Field(ge=1)]
+    priority: TaskPriority
+    title: Annotated[str, Field(min_length=3, max_length=200)]
+    who: FixActor
+    time: FixTime
+    steps: Annotated[list[AIStep], Field(min_length=1, max_length=3)]
+    fallback: Annotated[str, Field(max_length=600)] | None
+    fixes_fully: bool
+    finding_ids: Annotated[list[UUID], Field(min_length=1, max_length=15)]
+    highest_risk_score: Annotated[float | None, Field(ge=0, le=100)]
+    sources: Annotated[list[AISourceLink], Field(max_length=3)]
+
+
+class AIFindingNote(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    finding_id: UUID
+    plain_title: Annotated[str, Field(min_length=3, max_length=400)]
+    cause: Annotated[str, Field(min_length=3, max_length=600)]
+    what_could_happen: Annotated[str, Field(min_length=3, max_length=600)]
+    task_rank: Annotated[int | None, Field(ge=1)]
+
+
+class ScanAIAnalysis(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    summary: AIText
+    tasks: Annotated[list[AIFixTask], Field(max_length=10)]
+    findings: Annotated[list[AIFindingNote], Field(max_length=15)]
+    not_checked: Annotated[str, Field(max_length=600)] | None
+
+
+class ProviderFixOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    effort: FixEffort
+    who: FixActor
+    steps: Annotated[
+        list[Annotated[str, Field(min_length=3, max_length=600)]],
+        Field(min_length=1, max_length=3),
     ]
-    important_findings: Annotated[
-        list[AIProviderFindingExplanation], Field(max_length=15)
+    fixed_version: Annotated[str, Field(max_length=200)] | None
+    fixes_fully: bool
+    source_name: Annotated[str, Field(min_length=2, max_length=200)]
+    source_url: Annotated[str, Field(min_length=8, max_length=2000)]
+
+
+class ProviderCVEFixResearch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version_affected: Literal["yes", "no", "unknown"]
+    options: Annotated[list[ProviderFixOption], Field(max_length=3)]
+
+
+class AIExplainRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: Literal["scan", "host"]
+    context_id: UUID
+    language: AILanguage = "en"
+
+
+class ExplanationPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    lead: Annotated[str, Field(min_length=3, max_length=200)]
+    text: Annotated[str, Field(min_length=3, max_length=600)]
+
+
+class ScanExplanation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    in_short: Annotated[str, Field(min_length=3, max_length=1000)]
+    meanings: Annotated[list[ExplanationPoint], Field(max_length=4)]
+    not_seen: Annotated[
+        list[Annotated[str, Field(min_length=3, max_length=600)]],
+        Field(max_length=4),
     ]
-    uncertainties: Annotated[list[AIShortText], Field(max_length=20)]
+
+
+class MachineExplanation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    what_it_is: Annotated[str, Field(min_length=3, max_length=600)]
+    problems: Annotated[str, Field(min_length=3, max_length=600)]
+
+
+class _AIExplanationEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    context_id: UUID
+    language: AILanguage
+    created_at: datetime
+
+
+class ScanExplanationResponse(_AIExplanationEnvelope):
+    scope: Literal["scan"]
+    explanation: ScanExplanation
+
+
+class MachineExplanationResponse(_AIExplanationEnvelope):
+    scope: Literal["host"]
+    explanation: MachineExplanation
+
+
+AIExplanationResponse = Annotated[
+    ScanExplanationResponse | MachineExplanationResponse,
+    Field(discriminator="scope"),
+]
 
 
 class ScanAIAnalysisUnavailable(BaseModel):
@@ -199,8 +294,17 @@ class _ScanAIAnalysisJob(BaseModel):
     updated_at: datetime
 
 
+class ScanAIAnalysisProgress(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stage: Literal["fixes", "groups", "summary"]
+    done: Annotated[int, Field(ge=0)]
+    total: Annotated[int, Field(ge=0)]
+
+
 class ScanAIAnalysisQueued(_ScanAIAnalysisJob):
     status: Literal["pending", "processing"]
+    progress: ScanAIAnalysisProgress | None = None
 
 
 class ScanAIAnalysisFailed(_ScanAIAnalysisJob):

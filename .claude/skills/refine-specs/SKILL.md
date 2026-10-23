@@ -4,7 +4,7 @@ description: >-
   Grilling session that challenges a feature's TRUTH/ARCHITECTURE/DESIGN against the domain
   language in docs/, the ADRs, and the existing hardware-agent code — sharpening terminology
   and scope and updating the spec docs inline as decisions crystallise. Read-only on
-  application code. Use between /feature-planning and the human approval gate, or when the
+  application code. Use between writing specs and the human approval gate, or when the
   user asks to grill, refine, or stress-test specs.
 disable-model-invocation: true
 ---
@@ -17,9 +17,9 @@ on `hardware-agent/**`.
 
 ## When to run
 
-Between `/feature-planning` (specs written) and the approval gate — or whenever the operator
+Between spec writing and the approval gate — or whenever the operator
 asks to grill, refine, or stress-test specs. Never edit application code; never start
-`/feature-orchestrator`.
+the build loop.
 
 ## How to grill
 
@@ -113,4 +113,4 @@ When grilling is complete (or the operator stops), summarize:
 1. Spec files updated inline
 2. Open questions remaining (→ `open-questions/to-define.md`)
 3. ADR candidates, if any
-4. Whether specs are ready for the approval gate and `/feature-orchestrator`
+4. Whether specs are ready for the approval gate and `/create-tasks`

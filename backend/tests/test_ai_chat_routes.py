@@ -4,38 +4,39 @@ from api.core.config import get_settings
 from api.main import app
 from api.models.identity import User
 from api.models.persistence import AIChatMessageRecord, AIUsageRecord
-from api.schemas.ai import ProviderAIChatResponse
 from api.schemas.read import (
     FindingEvidenceConfidenceCounts,
     FindingEvidenceMethodCounts,
     FindingEvidenceSummary,
 )
 from api.services.ai.context import FindingChatContext, HostChatContext
-from api.services.ai.groq import AIProviderError
+from api.services.ai.openai_responses import (
+    AIProviderError,
+    ChatTextPart,
+    ProviderChatAnswer,
+)
 from read_factories import seed_read_graph
 from sqlmodel import select
+
+
+def _answer(text: str) -> ProviderChatAnswer:
+    return ProviderChatAnswer(
+        parts=(ChatTextPart(text=text, citations=()),), sources=frozenset()
+    )
 
 
 class _FakeProvider:
     def answer_question(self, context, question, *, language="en"):
         assert question == "o que devo corrigir?"
         assert context.top_findings
-        return ProviderAIChatResponse(
-            answer="Revise o achado prioritário.",
-            uncertainties=[],
-            referenced_finding_refs=["finding_1"],
-        )
+        return _answer("Revise finding_1 primeiro.")
 
 
 class _ScopedFakeProvider:
     def answer_question(self, context, question, *, language="en"):
         assert question == "explique este contexto"
         assert isinstance(context, FindingChatContext | HostChatContext)
-        return ProviderAIChatResponse(
-            answer="Explicação fundamentada.",
-            uncertainties=[],
-            referenced_finding_refs=["finding_1"],
-        )
+        return _answer("Explicação fundamentada sobre finding_1.")
 
 
 def _enable_ai(monkeypatch):
@@ -102,7 +103,7 @@ def test_ai_usage_is_scoped_and_exposes_only_metadata(
     assert all("prompt" not in item for item in body["data"])
 
 
-def test_context_chat_scan_returns_grounded_response_without_calling_groq(
+def test_context_chat_scan_returns_grounded_response_without_calling_the_provider(
     client, administrative_session, actor_headers, monkeypatch
 ):
     seeded = seed_read_graph(administrative_session)
@@ -124,7 +125,7 @@ def test_context_chat_scan_returns_grounded_response_without_calling_groq(
         app.dependency_overrides.pop(get_settings, None)
 
     assert response.status_code == 200
-    assert response.json()["answer"] == "Revise o achado prioritário."
+    assert response.json()["answer"] == "Revise Vulnerable service primeiro."
     assert len(response.json()["referenced_finding_ids"]) == 1
 
 
@@ -186,7 +187,9 @@ def test_context_chat_finding_returns_grounded_response(
         app.dependency_overrides.pop(get_settings, None)
 
     assert response.status_code == 200
-    assert response.json()["answer"] == "Explicação fundamentada."
+    assert response.json()["answer"] == (
+        "Explicação fundamentada sobre Vulnerable service."
+    )
 
 
 def test_context_chat_host_returns_grounded_response(
@@ -212,7 +215,9 @@ def test_context_chat_host_returns_grounded_response(
         app.dependency_overrides.pop(get_settings, None)
 
     assert response.status_code == 200
-    assert response.json()["answer"] == "Explicação fundamentada."
+    assert response.json()["answer"] == (
+        "Explicação fundamentada sobre Vulnerable service."
+    )
 
 
 def test_host_chat_route_passes_full_filtered_summary_to_provider(
@@ -252,10 +257,7 @@ def test_host_chat_route_passes_full_filtered_summary_to_provider(
             assert isinstance(context, HostChatContext)
             assert len(context.findings) == 1
             assert context.evidence_summary == summary
-            return ProviderAIChatResponse(
-                answer="Há registros para revisar.", uncertainties=[],
-                referenced_finding_refs=["finding_1"],
-            )
+            return _answer("Há registros para revisar em finding_1.")
 
     monkeypatch.setattr(
         "api.routers.ai.build_ai_provider", lambda settings: _SummaryProvider()
@@ -289,7 +291,9 @@ def test_host_chat_route_passes_full_filtered_summary_to_provider(
         app.dependency_overrides.pop(get_settings, None)
 
     assert response.status_code == 200
-    assert response.json()["answer"] == "Há registros para revisar."
+    assert response.json()["answer"] == (
+        "Há registros para revisar em Vulnerable service."
+    )
 
     history = client.get(
         "/api/v1/ai/chat/history",
@@ -324,3 +328,218 @@ def test_context_chat_finding_unknown_finding_returns_404(
         app.dependency_overrides.pop(get_settings, None)
 
     assert response.status_code == 404
+
+
+def test_context_chat_stops_at_the_daily_question_limit(
+    client, administrative_session, actor_headers, monkeypatch
+):
+    seeded = seed_read_graph(administrative_session)
+    headers = actor_headers(seeded["org"].id, "viewer")
+    user = administrative_session.exec(
+        select(User).where(User.org_id == seeded["org"].id)
+    ).one()
+    administrative_session.add_all(
+        AIUsageRecord(
+            org_id=seeded["org"].id,
+            user_id=user.id,
+            operation="chat",
+            provider="openai",
+            model="gpt-6-luna",
+            status="success",
+        )
+        for _ in range(3)
+    )
+    administrative_session.commit()
+    settings = get_settings().model_copy(
+        update={
+            "ai_enabled": True,
+            "ai_api_key": "test-key",  # pragma: allowlist secret
+            "ai_chat_daily_limit": 3,
+        }
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+
+    def _no_provider(settings):
+        raise AssertionError("the provider must not be called over the limit")
+
+    monkeypatch.setattr("api.routers.ai.build_ai_provider", _no_provider)
+    try:
+        response = client.post(
+            "/api/v1/ai/chat",
+            json={
+                "question": "o que devo corrigir?",
+                "scope": "scan",
+                "context_id": str(seeded["scan"].scan_id),
+                "language": "pt-BR",
+            },
+            headers=headers,
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "ai_daily_limit"
+    assert "3" in response.json()["error"]["message"]
+
+
+def test_context_chat_removes_secrets_before_the_provider_and_history(
+    client, administrative_session, actor_headers, monkeypatch
+):
+    seeded = seed_read_graph(administrative_session)
+    _enable_ai(monkeypatch)
+    received = []
+
+    class _RecordingProvider:
+        def answer_question(self, context, question, *, language="en"):
+            received.append(question)
+            return _answer("Troque a senha de finding_1.")
+
+    monkeypatch.setattr(
+        "api.routers.ai.build_ai_provider", lambda settings: _RecordingProvider()
+    )
+    try:
+        response = client.post(
+            "/api/v1/ai/chat",
+            json={
+                "question": "my password: hunter2 on 192.168.1.10",
+                "scope": "scan",
+                "context_id": str(seeded["scan"].scan_id),
+            },
+            headers=actor_headers(seeded["org"].id, "viewer"),
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    assert received == ["my password: [removed] on [removed]"]
+    saved = administrative_session.exec(select(AIChatMessageRecord)).one()
+    assert saved.question == "my password: [removed] on [removed]"
+
+
+def test_conversations_survive_new_chat_and_keep_messages_after_ten(
+    client, administrative_session, actor_headers, monkeypatch,
+):
+    from uuid import uuid4
+
+    seeded = seed_read_graph(administrative_session)
+    headers = actor_headers(seeded['org'].id, 'viewer')
+    _enable_ai(monkeypatch)
+    monkeypatch.setattr(
+        'api.routers.ai.build_ai_provider', lambda settings: _FakeProvider()
+    )
+    first_id, second_id = uuid4(), uuid4()
+    try:
+        for index in range(12):
+            result = client.post('/api/v1/ai/chat', json={
+                'scope': 'scan', 'context_id': str(seeded['scan'].scan_id),
+                'question': 'o que devo corrigir?', 'conversation_id': str(first_id),
+            }, headers=headers)
+            assert result.status_code == 200, result.text
+            assert result.json()['conversation_id'] == str(first_id)
+        result = client.post('/api/v1/ai/chat', json={
+            'scope': 'scan', 'context_id': str(seeded['scan'].scan_id),
+            'question': 'o que devo corrigir?', 'conversation_id': str(second_id),
+        }, headers=headers)
+        assert result.status_code == 200
+        params = {'scope': 'scan', 'context_id': str(seeded['scan'].scan_id)}
+        chats = client.get(
+            '/api/v1/ai/chat/conversations', params=params, headers=headers
+        )
+        assert chats.status_code == 200
+        assert [chat['conversation_id'] for chat in chats.json()['data']] == [
+            str(second_id), str(first_id),
+        ]
+        history = client.get('/api/v1/ai/chat/history', params={
+            **params, 'conversation_id': str(first_id),
+        }, headers=headers)
+        assert len(history.json()['data']) == 12
+        assert len(administrative_session.exec(select(AIChatMessageRecord)).all()) == 13
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+
+def test_conversations_are_private_and_cannot_be_reused_in_another_context(
+    client, administrative_session, actor_headers, monkeypatch,
+):
+    from uuid import uuid4
+
+    seeded = seed_read_graph(administrative_session)
+    headers = actor_headers(seeded['org'].id, 'viewer')
+    _enable_ai(monkeypatch)
+    monkeypatch.setattr(
+        'api.routers.ai.build_ai_provider', lambda settings: _FakeProvider()
+    )
+    conversation_id = str(uuid4())
+    payload = {'scope': 'scan', 'context_id': str(seeded['scan'].scan_id),
+               'question': 'o que devo corrigir?', 'conversation_id': conversation_id}
+    try:
+        saved = client.post('/api/v1/ai/chat', json=payload, headers=headers)
+        assert saved.status_code == 200
+        other_user = actor_headers(seeded['org'].id, 'admin')
+        params = {'scope': 'scan', 'context_id': payload['context_id']}
+        assert client.get('/api/v1/ai/chat/conversations', params=params,
+                          headers=other_user).json()['data'] == []
+        assert client.get('/api/v1/ai/chat/history', params={
+            **params, 'conversation_id': conversation_id,
+        }, headers=other_user).json()['data'] == []
+        assert client.post('/api/v1/ai/chat', json=payload,
+                           headers=other_user).status_code == 404
+        assert client.post('/api/v1/ai/chat', json={
+            **payload, 'scope': 'host', 'context_id': str(seeded['host'].id),
+        }, headers=headers).status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+
+def test_long_saved_chats_and_conversation_list_are_paginated_without_deletion(
+    client, administrative_session, actor_headers,
+):
+    from datetime import datetime, timedelta, timezone
+    from uuid import uuid4
+
+    seeded = seed_read_graph(administrative_session)
+    headers = actor_headers(seeded['org'].id, 'viewer')
+    user = administrative_session.exec(
+        select(User).where(User.org_id == seeded['org'].id)
+    ).one()
+    conversation_id = uuid4()
+    start = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    messages = [AIChatMessageRecord(
+        scan_id=seeded['scan'].scan_id, user_id=user.id,
+        scope_type='scan', scope_id=seeded['scan'].scan_id,
+        conversation_id=conversation_id,
+        question=f'Question {index:02}', answer='A saved answer.',
+        created_at=start + timedelta(seconds=index),
+    ) for index in range(60)]
+    messages.extend(AIChatMessageRecord(
+        scan_id=seeded['scan'].scan_id, user_id=user.id,
+        scope_type='scan', scope_id=seeded['scan'].scan_id,
+        question=f'Another chat {index}', answer='Another saved answer.',
+        created_at=start - timedelta(minutes=index + 1),
+    ) for index in range(52))
+    administrative_session.add_all(messages)
+    administrative_session.commit()
+    params = {'scope': 'scan', 'context_id': str(seeded['scan'].scan_id)}
+    first = client.get('/api/v1/ai/chat/conversations', params=params, headers=headers)
+    second = client.get('/api/v1/ai/chat/conversations', params={
+        **params, 'page': 2,
+    }, headers=headers)
+    assert len(first.json()['data']) == 50
+    assert first.json()['has_more'] is True
+    assert first.json()['data'][0]['title'] == 'Question 00'
+    assert len(second.json()['data']) == 3
+    assert second.json()['has_more'] is False
+    params['conversation_id'] = str(conversation_id)
+    first = client.get('/api/v1/ai/chat/history', params=params, headers=headers)
+    second = client.get('/api/v1/ai/chat/history', params={
+        **params, 'page': 2,
+    }, headers=headers)
+    assert first.json()['has_more'] is True
+    assert [item['question'] for item in first.json()['data']] == [
+        f'Question {index:02}' for index in range(10, 60)
+    ]
+    assert second.json()['has_more'] is False
+    assert [item['question'] for item in second.json()['data']] == [
+        f'Question {index:02}' for index in range(10)
+    ]
+    assert len(administrative_session.exec(select(AIChatMessageRecord)).all()) == 112

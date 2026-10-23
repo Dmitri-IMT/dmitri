@@ -8,7 +8,9 @@ import { renderWithProviders } from '@/test/renderWithProviders'
 import { baseURL } from '@/test/agentsHarness'
 import { defaultAgent, defaultCommand } from '@/test/mswHandlers'
 import { server } from '@/test/setup'
-import HostFindings from './hosts/HostFindings'
+import { useQuery } from '@tanstack/react-query'
+import { listFindings } from '@/api/findings'
+import { queryKeys } from '@/api/queryKeys'
 import DeviceDetail from './DeviceDetail'
 import Network from './Network'
 import Scans from './Scans'
@@ -20,6 +22,15 @@ afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
+
+function FindingsProbe() {
+  const params = { host_id: 'host-for-invalidation', per_page: 100 }
+  useQuery({
+    queryKey: queryKeys.findings.list(params),
+    queryFn: () => listFindings(params),
+  })
+  return null
+}
 
 describe('DeviceDetail command cache invalidation', () => {
   it('refreshes each completed-product family once and does not repeat the done sweep', async () => {
@@ -74,7 +85,7 @@ describe('DeviceDetail command cache invalidation', () => {
         </Routes>
         <Scans />
         <Network />
-        <HostFindings hostId="host-for-invalidation" />
+        <FindingsProbe />
       </>,
       { route: agentRoute },
     )
@@ -161,7 +172,7 @@ describe('DeviceDetail command cache invalidation', () => {
         </Routes>
         <Scans />
         <Network />
-        <HostFindings hostId="host-for-invalidation" />
+        <FindingsProbe />
       </>,
       { route: agentRoute },
     )

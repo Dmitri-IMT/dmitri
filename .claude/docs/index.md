@@ -60,8 +60,8 @@ FastAPI API plus CVE-enrichment worker. Full listing in [backend/index.md](./bac
 * [backend/schemas](./backend/schemas.md) — The Pydantic ingest/read/command/agent schemas, including live progress snapshots, plus profile, organization-member, auth and invite models.
 * [backend/error-codes](./backend/error-codes.md) — The closed ScanErrorCode set and the two pure helpers every read path uses to normalise a stored command code onto the wire.
 * [backend/services](./backend/services.md) — Backend business logic for ingest, guarded live progress, reads, enrichment, command delivery and cancel, presence, idempotent device revoke/restore, and admin scan/machine deletion.
-* [backend/ai](./backend/ai.md) — On-demand Groq overview of a completed scan. A member POSTs to request it; a separate worker loop claims one job after enrichment for that scan is idle; scan completion never enqueues AI.
-* [backend/migrations](./backend/migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, live progress, and scan/machine deletion. Head is `20261012_40`.
+* [backend/ai](./backend/ai.md) — OpenAI fix tasks, researched sources, cached explanations, web-assisted chat and usage metadata.
+* [backend/migrations](./backend/migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, live progress, scan/machine deletion, and read-only MCP. Head is `20261024_49`.
 
 ## Frontend (auth, Home, Settings, user administration, and scan/host reads)
 
@@ -79,7 +79,7 @@ The React 19 + TypeScript SPA. Full listing in [frontend/index.md](./frontend/in
 * [frontend/devices-screen](./frontend/devices-screen.md) — Devices shows Online, Offline or Revoked; DeviceDetail owns scan and remote-update controls, plus admin revoke/restore and readiness-gates update requests.
 * [frontend/agent-update-section](./frontend/agent-update-section.md) — DeviceDetail's localized update availability, readiness, version, operation-history and confirmed admin request section.
 * [frontend/agent-update-hook](./frontend/agent-update-hook.md) — Device update queries, active-operation polling, request idempotency, cache reconciliation and deduplicated read-error notifications.
-* [frontend/scan-ai](./frontend/scan-ai.md) — Scan Detail card that GETs analysis status, offers Explain this scan once, polls only while pending or processing, and renders the Groq overview when completed.
+* [frontend/scan-ai](./frontend/scan-ai.md) — Fix-task list with language-specific caching, progress, checked sources and scanner fallback.
 * [frontend/MCP settings and browser consent](./frontend/mcp.md) — Compact MCP settings with a setup modal for Codex and Claude Code, copyable commands and prompts, and current-user connection controls.
 * [frontend/tables](./frontend/tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
 * [frontend/host-detail](./frontend/host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states, and the host's findings section owns its own.

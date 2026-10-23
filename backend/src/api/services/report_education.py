@@ -184,8 +184,13 @@ def build_report_education(
     analysis: ScanAIAnalysis | None = None,
 ) -> ReportEducation:
     advisories = advisories or {}
-    explanations = {item.finding_id: item for item in analysis.important_findings} \
+    explanations = {item.finding_id: item for item in analysis.findings} \
         if analysis else {}
+    task_steps = {
+        finding_id: " ".join(task.steps)
+        for task in reversed(analysis.tasks)
+        for finding_id in task.finding_ids
+    } if analysis else {}
     host_findings: dict[str, list[FindingRead]] = defaultdict(list)
     for finding in detail.findings:
         address = str(finding.host_ip) if finding.host_ip else ""
@@ -430,13 +435,15 @@ def build_report_education(
                 for observation in finding.evidence_observations
             ],
             "description": finding.description,
-            "recommendation": explanation.recommendation if explanation
-            else finding.recommendation,
+            "recommendation": task_steps.get(
+                finding.finding_id, finding.recommendation
+            ),
             "evidence": finding.evidence,
-            "plain_language_explanation": explanation.plain_language_explanation
+            "plain_language_explanation": explanation.cause
             if explanation else None,
-            "why_it_matters": explanation.why_it_matters if explanation else None,
-            "uncertainty": explanation.uncertainty if explanation else None,
+            "why_it_matters": explanation.what_could_happen
+            if explanation else None,
+            "uncertainty": None,
             "advisory_effects": effects,
             "advisory_description": advisory.get("description"),
             "advisory_fetched_at": advisory.get("fetched_at"),

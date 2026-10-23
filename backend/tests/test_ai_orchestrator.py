@@ -1,18 +1,20 @@
 from uuid import uuid4
 
-from api.schemas.ai import ProviderAIChatResponse
 from api.services.ai.chat import AIChatContextBundle, answer_interactive_question
+from api.services.ai.openai_responses import ChatTextPart, ProviderChatAnswer
+
+
+def _answer(text: str) -> ProviderChatAnswer:
+    return ProviderChatAnswer(
+        parts=(ChatTextPart(text=text, citations=()),), sources=frozenset()
+    )
 
 
 class FakeQuestionProvider:
     def answer_question(
         self, context: dict[str, object], question: str, language: str = "en"
-    ) -> ProviderAIChatResponse:
-        return ProviderAIChatResponse(
-            answer="Explanação baseada na evidência.",
-            uncertainties=[],
-            referenced_finding_refs=["finding_1"],
-        )
+    ) -> ProviderChatAnswer:
+        return _answer("Explanação baseada na evidência de finding_1.")
 
 
 def test_answer_interactive_question_materializes_references() -> None:

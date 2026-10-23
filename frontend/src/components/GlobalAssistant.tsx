@@ -1,69 +1,95 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router'
-import { BotIcon } from 'lucide-react'
+import { BotIcon, XIcon } from 'lucide-react'
 import ContextChat from '@/components/ContextChat'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
+  DialogClose,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from '@/components/ui/dialog'
 import useI18n from '@/i18n/useI18n'
-
-type AssistantContext = {
-  scope: 'scan' | 'host'
-  contextId: string
-  label: string
-}
 
 function GlobalAssistant() {
   const location = useLocation()
   const [open, setOpen] = useState(false)
+  const [conversations, setConversations] = useState<
+    Record<string, string | null>
+  >({})
   const { t } = useI18n()
-  const context = useMemo<AssistantContext | null>(() => {
-    const scanMatch = location.pathname.match(/^\/scans\/([^/]+)$/)
-    if (scanMatch) {
-      return { scope: 'scan', contextId: scanMatch[1], label: t('ai.thisScan') }
-    }
-    const hostMatch = location.pathname.match(/^\/network\/([^/]+)$/)
-    if (hostMatch) {
+  const context = useMemo(() => {
+    const scan = location.pathname.match(/^\/scans\/([^/]+)$/)
+    if (scan)
       return {
-        scope: 'host',
-        contextId: hostMatch[1],
-        label: t('ai.thisHost'),
+        scope: 'scan' as const,
+        contextId: scan[1],
       }
-    }
+    const host = location.pathname.match(/^\/network\/([^/]+)$/)
+    if (host)
+      return {
+        scope: 'host' as const,
+        contextId: host[1],
+      }
     return null
-  }, [location.pathname, t])
-
+  }, [location.pathname])
+  useEffect(() => {
+    const show = () => setOpen(true)
+    window.addEventListener('dmitri:assistant-open', show)
+    return () => window.removeEventListener('dmitri:assistant-open', show)
+  }, [])
   if (!context) return null
-
+  const contextKey = `${context.scope}:${context.contextId}`
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
-          className="fixed right-6 bottom-6 z-40 shadow-lg"
+          variant="outline"
           aria-label={t('ai.openAssistant')}
+          data-testid="top-bar-assistant"
         >
           <BotIcon aria-hidden="true" />
           {t('ai.assistant')}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-assistant-dialog overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{t('ai.askDmitri')}</DialogTitle>
-        </DialogHeader>
+      <DialogContent
+        showCloseButton={false}
+        className="flex h-160 max-h-assistant-dialog flex-col gap-0 overflow-hidden p-0 text-body-md sm:max-w-2xl"
+      >
+        <DialogDescription className="sr-only">
+          {t('assistant.empty')}
+        </DialogDescription>
         <ContextChat
-          key={`${context.scope}:${context.contextId}`}
+          key={contextKey}
           scope={context.scope}
           contextId={context.contextId}
-          title={t('ai.askAbout', { label: context.label })}
+          conversationId={conversations[contextKey] ?? null}
+          onConversationChange={(id) =>
+            setConversations((current) => ({ ...current, [contextKey]: id }))
+          }
+          heading={
+            <DialogTitle className="text-title-sm">
+              {t('ai.askDmitri')}
+            </DialogTitle>
+          }
+          closeButton={
+            <DialogClose asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t('common.close')}
+              >
+                <XIcon aria-hidden="true" />
+              </Button>
+            </DialogClose>
+          }
+          compact
+          questionPlaceholder={t('ai.placeholder')}
         />
       </DialogContent>
     </Dialog>
   )
 }
-
 export default GlobalAssistant

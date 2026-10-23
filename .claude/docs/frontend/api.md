@@ -4,7 +4,7 @@ title: frontend API layer
 description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account, org-administration and remote-agent-update resource modules.
 resource: frontend/src/api/client.ts
 tags: [frontend, api, axios, auth, refresh, invites]
-timestamp: 2026-10-20T00:00:00Z
+timestamp: 2026-10-23T14:36:51Z
 ---
 
 # frontend API layer
@@ -43,7 +43,7 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `listScans(params)` | `GET /scans` with required `page`, `per_page`, `sort_by`, `sort_order`. The scan list always sends `SCAN_LIST_SORT` (`timestamp`/`desc`) plus `SCANS_PER_PAGE` 20. | `frontend/src/api/scans.ts:48` |
 | `getScan(scanId)` | `GET /scans/{id}` → `ScanDetailResponse` (findings and hosts embedded). Scan detail opens a finding without a second request. | `frontend/src/api/scans.ts:58` |
 | `getScanAnalysis` / `requestScanAnalysis` | GET and POST `/scans/{id}/analysis` with `?language=` (`AILanguage`, default `en`). `downloadScanReport` takes the same argument. See [scan-ai](./scan-ai.md). | `frontend/src/api/scans.ts:67`, `:78` |
-| `getAIUsage` / `askContextAI` / `getContextAIHistory` | Usage dashboard and unified contextual chat. See [ai-usage](./ai-usage.md) and [context-ai](./context-ai.md). | `frontend/src/api/ai.ts:10`, `:18`, `:31` |
+| `getAIUsage` / `askContextAI` / `getAIConversations` / `getContextAIHistory` / `explainAIContext` | Usage, saved contextual chat messages, paginated conversation/history reads, and structured explanation POST. See [ai-usage](./ai-usage.md) and [context-ai](./context-ai.md). | `frontend/src/api/ai.ts` |
 | `deleteScan(scanId)` / `deleteAllScans()` | `DELETE /scans/{id}` (`204`) and `DELETE /scans` → `ScanDeletionResponse` (`deleted`, `skipped`, `machines_removed`). Admin only. | `frontend/src/api/scans.ts` |
 | `deleteHost(hostId)` / `deleteAllHosts()` | `DELETE /hosts/{id}` (`204`) and `DELETE /hosts` → `HostDeletionResponse` (`deleted`). Admin only. | `frontend/src/api/hosts.ts` |
 | `listHosts(params)` / `getHost(hostId)` | `GET /hosts` with required page/sort/`group` params (`HostGroup`; `HOST_LIST_DEFAULT_SORT_BY` is `last_seen_at`; `HOST_SORT_DEFAULT_ORDER` starts `vulnerability_count` and `last_seen_at` at `desc`, text columns at `asc`); `GET /hosts/{id}` → `HostDetailResponse`. | `frontend/src/api/hosts.ts` |

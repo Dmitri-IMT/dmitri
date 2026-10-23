@@ -4,7 +4,7 @@ import logging
 import threading
 
 from api.core.config import get_settings
-from api.services.ai.groq import ai_is_available
+from api.services.ai.openai_responses import ai_is_available
 from api.services.worker import run_ai_worker_loop, run_worker_loop
 
 

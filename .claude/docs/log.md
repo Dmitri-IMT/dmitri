@@ -5,18 +5,29 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-10-23
 
+* **Update**: Empty merge revision `20261024_49` joins the AI chain (`20261024_48`) and the
+  read-only MCP chain (`20261022_45`). Head is `20261024_49`.
+* **Update**: Focused chat modal uses the shipped design tokens, with clock history and pencil
+  new-chat actions. Private paginated conversations persist across closing and reopening;
+  migration `20261024_48` preserves surviving legacy transcripts and removes ten-message pruning.
+* **Update**: Explanation generation survives panel closing and language changes; cached reads
+  skip model-context construction, and PostgreSQL serializes concurrent generations per language.
+* **Update**: R6 scan and machine composition: story, to-do, meaning, shared risk-sorted
+  problems and counted IT disclosures. Replaced both finding panels and inline finding chats.
+* **Creation**: Result-component map covering term/risk hints, vulnerability states and
+  latest-scan machine task selection. Machine labels cap at 24 characters with full hover text.
+* **Update**: AI map, API references, models and migration head for structured cached scan/host
+  explanations, count/reference validation and the shared chat/explanation daily limit.
+* **Update**: Context assistant now opens in the top bar and from explanation panels.
 * **Update**: Fixed the agent-release workflow's runner context by scoping
   `GNUPGHOME` to its signing steps. Invalid job-level context prevented workflow
   validation and caused Railway to skip the API's MCP deployments through its CI gate.
-
 * **Update**: Removed the MCP setup modal's lock and organization/read-only banner.
   Selected client tabs now use a soft theme-aware gray fill in light and dark mode.
-
 * **Update**: MCP Settings now uses a compact account row and a shared wide modal
   for setup, prompts, permissions and connections. Turn off revokes the user's
   active connections and refreshes state after success or partial failure. Client
   tabs use Radix's actual selected state; prompt buttons are stacked and padded.
-
 * **Creation**: Added the frontend MCP code-map for inline Settings setup, local
   assistant commands, browser consent, organization scope, and own connections.
 * **Update**: Settings now documents the enabled MCP section with Codex and Claude

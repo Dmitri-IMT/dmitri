@@ -1,14 +1,7 @@
 from __future__ import annotations
 
-from uuid import uuid4
-
 import pytest
-from api.schemas.ai import (
-    AIProviderRecommendedAction,
-    AIRecommendedAction,
-    ProviderScanAIAnalysis,
-    ScanAIAnalysis,
-)
+from ai_shapes import provider_analysis, provider_task, stored_analysis
 from api.schemas.read import (
     FindingEvidenceConfidenceCounts,
     FindingEvidenceMethodCounts,
@@ -17,6 +10,7 @@ from api.schemas.read import (
 )
 from api.services.ai.context import AIFindingContext, ScanAIContext
 from api.services.ai.validation import (
+    KEV_TASK_ERROR,
     AIAnalysisValidationError,
     sanitize_scan_ai_analysis,
     validate_provider_analysis,
@@ -84,96 +78,53 @@ def _context() -> ScanAIContext:
     )
 
 
-def _analysis(actions: list[AIProviderRecommendedAction]) -> ProviderScanAIAnalysis:
-    return ProviderScanAIAnalysis(
-        executive_summary="Resumo seguro.",
-        overall_assessment="Avaliação baseada nos fatos fornecidos.",
-        plain_language_summary="Há pontos para revisar.",
-        priority_actions=actions,
-        important_findings=[],
-        uncertainties=[],
-    )
-
-
-def test_validation_derives_priority_and_sorts_actions():
-    analysis = _analysis(
-        [
-            AIProviderRecommendedAction(
-                priority="immediate",
-                title="Ação menos urgente",
-                description="Revise o item de menor risco.",
-                related_finding_refs=["finding_2"],
-            ),
-            AIProviderRecommendedAction(
-                priority="low",
-                title="Ação KEV",
-                description="Revise o item listado no KEV.",
-                related_finding_refs=["finding_1"],
-            ),
-        ]
+def test_validation_keeps_tasks_and_dedupes_their_references():
+    analysis = provider_analysis(
+        tasks=[
+            provider_task("finding_2", "finding_2"),
+            provider_task("finding_1"),
+        ],
+        findings=[],
     )
 
     validated = validate_provider_analysis(_context(), analysis)
 
-    assert [action.priority for action in validated.priority_actions] == [
-        "immediate",
-        "low",
-    ]
-    assert validated.priority_actions[0].related_finding_refs == ["finding_1"]
+    assert [task.fixes for task in validated.tasks] == [["finding_2"], ["finding_1"]]
 
 
-def test_validation_rejects_missing_kev_action():
-    analysis = _analysis(
-        [
-            AIProviderRecommendedAction(
-                priority="high",
-                title="Ação parcial",
-                description="Revise apenas o segundo achado.",
-                related_finding_refs=["finding_2"],
-            )
-        ]
-    )
+def test_validation_rejects_missing_kev_task():
+    analysis = provider_analysis(tasks=[provider_task("finding_2")], findings=[])
 
-    with pytest.raises(AIAnalysisValidationError):
+    with pytest.raises(AIAnalysisValidationError) as captured:
         validate_provider_analysis(_context(), analysis)
+
+    assert str(captured.value) == KEV_TASK_ERROR
 
 
 def test_validation_strips_invisible_unicode_before_persistence():
-    analysis = _analysis(
-        [
-            AIProviderRecommendedAction(
-                priority="low",
-                title="Ação\u200b KEV",
-                description="Revise\u2060 o item listado no KEV.",
-                related_finding_refs=["finding_1"],
+    analysis = provider_analysis(
+        tasks=[
+            provider_task(
+                "finding_1",
+                title="Update\u200b the router",
+                steps=("Install\u2060 the update.",),
             )
-        ]
+        ],
+        findings=[],
     )
 
     validated = validate_provider_analysis(_context(), analysis)
 
-    assert validated.priority_actions[0].title == "Ação KEV"
-    assert validated.priority_actions[0].description == "Revise o item listado no KEV."
+    assert validated.tasks[0].title == "Update the router"
+    assert validated.tasks[0].steps == ["Install the update."]
 
 
-def test_read_sanitizes_legacy_analysis_before_rendering():
-    analysis = ScanAIAnalysis(
-        executive_summary="Resumo\u200b seguro.",
-        overall_assessment="Avaliação segura.",
-        plain_language_summary="Texto seguro.",
-        priority_actions=[
-            AIRecommendedAction(
-                priority="low",
-                title="Ação\ufe0f local",
-                description="Descrição local segura.",
-                related_finding_ids=[uuid4()],
-            )
-        ],
-        important_findings=[],
-        uncertainties=[],
-    )
+def test_read_sanitizes_stored_analysis_before_rendering():
+    analysis = stored_analysis()
+    analysis.summary = "Resumo\u200b seguro."
+    analysis.tasks[0].title = "Ação\ufe0f local"
 
     sanitized = sanitize_scan_ai_analysis(analysis)
 
-    assert sanitized.executive_summary == "Resumo seguro."
-    assert sanitized.priority_actions[0].title == "Ação local"
+    assert sanitized.summary == "Resumo seguro."
+    assert sanitized.tasks[0].title == "Ação local"

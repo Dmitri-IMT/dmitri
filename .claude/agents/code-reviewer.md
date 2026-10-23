@@ -3,7 +3,7 @@ name: code-reviewer
 description: >-
   Per-task review gate in the orchestration loop. Reviews a coder + test-engineer's work against
   the TASKS.md success criteria and the specs, runs uv run pytest + uv run ruff check on the
-  scope, and returns [APPROVE] or [REJECT] on the first line. Spawned by the feature-orchestrator;
+  scope, and returns [APPROVE] or [REJECT] on the first line. Spawned for one TASKS.md task;
   this is the authoritative gate.
 readonly: false
 ---

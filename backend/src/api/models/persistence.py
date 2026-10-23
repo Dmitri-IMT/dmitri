@@ -79,6 +79,8 @@ class AIUsageRecord(SQLModel, table=True):
     input_tokens: int | None = None
     output_tokens: int | None = None
     total_tokens: int | None = None
+    cached_input_tokens: int | None = None
+    reasoning_tokens: int | None = None
     latency_ms: int | None = None
     http_status: int | None = None
     request_id: str | None = None
@@ -439,6 +441,23 @@ class RiskSnapshotRecord(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
+class AIFixRecord(SQLModel, table=True):
+    __tablename__ = "ai_fix_records"
+
+    id: int | None = Field(default=None, primary_key=True)
+    cache_key: str = Field(unique=True, index=True)
+    cve_id: str = Field(index=True)
+    product: str
+    version: str
+    research_version: str
+    record_json: dict[str, Any] = Field(sa_column=Column(JSON))
+    has_fix: bool
+    kev_fingerprint: str
+    nvd_last_modified: str | None = None
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    expires_at: datetime = Field(index=True, sa_type=UTC_TIMESTAMP)
+
+
 class AIScanAnalysisRecord(SQLModel, table=True):
     __tablename__ = "ai_scan_analyses"
     __table_args__ = (
@@ -471,6 +490,9 @@ class AIScanAnalysisRecord(SQLModel, table=True):
     failed_findings: int = 0
     total_findings: int = 0
     context_hash: str | None = None
+    progress_stage: str | None = None
+    progress_done: int | None = None
+    progress_total: int | None = None
     attempts: int = 0
     last_error: str | None = None
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
@@ -486,10 +508,34 @@ class AIScanAnalysisRecord(SQLModel, table=True):
     )
 
 
+class AIExplanationRecord(SQLModel, table=True):
+    __tablename__ = "ai_explanations"
+    __table_args__ = (
+        UniqueConstraint(
+            "scope",
+            "context_id",
+            "language",
+            "prompt_version",
+            name="uq_ai_explanations_context",
+        ),
+        CheckConstraint("scope IN ('scan', 'host')", name="ck_ai_explanations_scope"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    scope: str
+    context_id: UUID = Field(index=True)
+    scan_id: UUID = Field(index=True, foreign_key="scans.scan_id")
+    language: str
+    prompt_version: str
+    explanation_json: dict[str, Any] = Field(sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+
+
 class AIChatMessageRecord(SQLModel, table=True):
     __tablename__ = "ai_chat_messages"
 
     message_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    conversation_id: UUID = Field(default_factory=uuid4, index=True)
     scan_id: UUID = Field(index=True, foreign_key="scans.scan_id")
     user_id: UUID = Field(index=True, foreign_key="users.id")
     scope_type: str = Field(default="scan", index=True)

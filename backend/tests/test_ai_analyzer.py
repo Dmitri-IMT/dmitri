@@ -2,11 +2,8 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from api.schemas.ai import (
-    AIProviderFindingExplanation,
-    ProviderScanAIAnalysis,
-    ProviderScanAIChildAnalysis,
-)
+from ai_shapes import child_analysis, provider_analysis, provider_note
+from api.schemas.ai import ProviderScanAIAnalysis, ProviderScanAIChildAnalysis
 from api.schemas.read import (
     FindingEvidenceConfidenceCounts,
     FindingEvidenceMethodCounts,
@@ -15,7 +12,7 @@ from api.schemas.read import (
 )
 from api.services.ai.analyzer import run_bounded_analysis, split_context
 from api.services.ai.context import AIFindingContext, ScanAIContext
-from api.services.ai.groq import AIProviderError
+from api.services.ai.openai_responses import AIProviderError
 
 
 def _context() -> ScanAIContext:
@@ -77,32 +74,15 @@ def _context() -> ScanAIContext:
 
 
 def _child(ref: str) -> ProviderScanAIChildAnalysis:
-    return ProviderScanAIChildAnalysis(
-        priority_actions=[],
-        important_findings=[
-            AIProviderFindingExplanation(
-                finding_ref=ref,
-                why_it_matters="This vulnerability needs review.",
-                plain_language_explanation="An exposed service needs review.",
-                recommendation="Ask an IT professional to review it.",
-                evidence_used=["The scan recorded this vulnerability."],
-                uncertainty=None,
-            )
-        ],
-        uncertainties=[],
-    )
+    return child_analysis(findings=[provider_note(ref)])
 
 
 def _synthesis() -> ProviderScanAIAnalysis:
-    return ProviderScanAIAnalysis(
-        executive_summary="Two vulnerabilities need attention.",
-        overall_assessment="The observed risk is limited in scope.",
-        plain_language_summary="Ask an IT professional to review the results.",
-        priority_actions=[],
-        important_findings=[],
-        uncertainties=[
-            "The scan cannot confirm whether the vulnerabilities were used."
-        ],
+    return provider_analysis(
+        summary="Two vulnerabilities need an update this week.",
+        tasks=[],
+        findings=[],
+        not_checked="The scan cannot confirm whether the vulnerabilities were used.",
     )
 
 
@@ -196,7 +176,7 @@ def test_bounded_child_and_repair_keep_partial_coverage():
         def analyze_chunk(self, chunk, *, language="en"):
             received["child"].append((chunk.evidence_completeness, chunk.stopped_by))
             child = _child(chunk.top_findings[0].finding_ref)
-            child.important_findings[0].why_it_matters = "The device needs review."
+            child.findings[0].cause = "The device needs review."
             return child
 
         def repair_chunk(self, chunk, violation_codes, *, language="en"):
@@ -250,7 +230,7 @@ def test_synthesis_style_repair_stays_inside_analyzer():
             self, context, child_results, failed_refs, *, language="en"
         ):
             analysis = _synthesis()
-            analysis.executive_summary = "Your network is safe."
+            analysis.summary = "Your network is safe."
             return analysis
 
         def repair_analysis(self, context, violation_codes, *, language="en"):
@@ -261,5 +241,5 @@ def test_synthesis_style_repair_stays_inside_analyzer():
         Provider(), _context(), child_findings=1, language="pt-BR"
     )
     assert analysis == _synthesis()
-    assert calls == [(("executive_summary:safety_certification",), "pt-BR")]
+    assert calls == [(("summary:safety_certification",), "pt-BR")]
     assert coverage.analyzed_findings == 2

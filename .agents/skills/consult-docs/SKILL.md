@@ -21,7 +21,6 @@ The knowledge base lives at **`docs/`**. **Do not read every file.**
 
 ## When invoked from the pipeline
 
-- **`feature-planning`**: the index + 1–2 docs relevant to the feature narrative.
 - **`refine-specs`**: the index + docs that contradict or clarify spec terminology or ADRs.
 - **Orchestration subagents**: only the docs cited in `ARCHITECTURE.md` / `DESIGN.md` or the
   task prompt — use this skill if the path is unclear.

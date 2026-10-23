@@ -22,6 +22,7 @@ export type SortOrder = 'asc' | 'desc'
 
 type DataTableColumnBase<Row> = {
   label: string
+  visuallyHiddenHeader?: boolean
   width: string
   render: (row: Row) => ReactNode
   align?: 'right'
@@ -45,6 +46,7 @@ export type DataTableRowAction<Row> =
     }
   | {
       kind: 'expand'
+      togglePosition?: 'first' | 'last'
       panel: (row: Row) => ReactNode
       label: (row: Row) => string
       openRowId: string | null
@@ -175,7 +177,12 @@ function DataTable<Row, SortKey extends string = never>({
       )
     }
 
-    if (index === 0 && rowAction?.kind === 'expand') {
+    if (
+      rowAction?.kind === 'expand' &&
+      (rowAction.togglePosition === 'last'
+        ? index === columns.length - 1
+        : index === 0)
+    ) {
       const id = rowId(row)
       const isOpen = rowAction.openRowId === id
       return (
@@ -203,7 +210,9 @@ function DataTable<Row, SortKey extends string = never>({
             aria-hidden="true"
             className={`size-3 shrink-0 transition-transform ease-standard ${isOpen ? 'rotate-90' : ''}`}
           />
-          <span className="truncate">{content}</span>
+          {rowAction.togglePosition !== 'last' && (
+            <span className="truncate">{content}</span>
+          )}
         </Button>
       )
     }
@@ -234,7 +243,7 @@ function DataTable<Row, SortKey extends string = never>({
           data-row-action={isLink ? 'link' : isExpand ? 'expand' : undefined}
           className={`${
             isLink || isExpand
-              ? `${INTERACTIVE_ROW} ${isOpen ? 'bg-card' : ''}`
+              ? `${INTERACTIVE_ROW} ${isOpen ? 'bg-canvas' : ''}`
               : INERT_ROW
           } ${tone === 'muted' ? 'text-muted-foreground' : ''}`}
           onClick={
@@ -340,7 +349,13 @@ function DataTable<Row, SortKey extends string = never>({
                       )}
                     </Button>
                   ) : (
-                    column.label
+                    <span
+                      className={
+                        column.visuallyHiddenHeader ? 'sr-only' : undefined
+                      }
+                    >
+                      {column.label}
+                    </span>
                   )}
                 </th>
               )
