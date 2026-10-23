@@ -16,6 +16,7 @@ import DeviceDetail from '@/pages/DeviceDetail'
 import Settings from '@/pages/Settings'
 import Users from '@/pages/Users'
 import NotFound from '@/pages/NotFound'
+import McpAuthorize from '@/pages/McpAuthorize'
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/invite" element={<AcceptInvite />} />
+      <Route path="/mcp/authorize" element={<McpAuthorize />} />
       <Route element={<RequireSession />}>
         <Route element={<AppShell />}>
           <Route path="/" element={<Home />} />

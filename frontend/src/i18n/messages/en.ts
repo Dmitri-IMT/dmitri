@@ -8,6 +8,75 @@ const SEVERITY: Record<string, string> = {
 }
 
 export const catalog = {
+  'mcp.title': 'MCP',
+  'mcp.description': 'Use your scans in Codex or Claude Code.',
+  'mcp.scope': ({ organization }) =>
+    `${organization} · Read-only access to your organization`,
+  'mcp.chooseClient': 'Choose your assistant',
+  'mcp.addServer': 'Add Dmitri in your terminal',
+  'mcp.terminalHelp':
+    'With your assistant’s CLI installed, run this command on your computer.',
+  'mcp.copyAddCommand': 'Copy add-server command',
+  'mcp.copyLoginCommand': 'Copy sign-in command',
+  'mcp.commandCopied': 'Command copied.',
+  'mcp.copyError': 'Could not copy. Select the text and copy it manually.',
+  'mcp.signIn': 'Sign in to Dmitri',
+  'mcp.codexLoginHelp': 'Run this command to open browser sign-in.',
+  'mcp.claudeLoginHelp':
+    'Open Claude Code, run /mcp, select Dmitri, then choose Authenticate.',
+  'mcp.signInHelp':
+    'Sign in with your Dmitri account. Check your organization, then approve read access. Return here to see your connection.',
+  'mcp.tryPrompts': 'Then, ask your assistant',
+  'mcp.promptHelp': ({ client }) => `Copy a prompt into ${client}.`,
+  'mcp.copyPrompt': ({ prompt }) => `Copy prompt: ${prompt}`,
+  'mcp.promptCopied': 'Prompt copied. Paste it into your assistant.',
+  'mcp.prompt.scan': 'Summarize my latest NSPi scan.',
+  'mcp.prompt.modbus': 'Which machines expose Modbus?',
+  'mcp.prompt.findings': 'Show findings and their evidence.',
+  'mcp.promptText.scan':
+    'Use the Dmitri MCP to show my latest NSPi scan. Summarize the machines found and cite the scan.',
+  'mcp.promptText.modbus':
+    'Use the Dmitri MCP to find machines with Modbus services in my latest NSPi scan. Cite the observations and state any evidence or coverage gaps.',
+  'mcp.promptText.findings':
+    'Use the Dmitri MCP to show the findings in my latest completed scan, with supporting evidence and links back to Dmitri.',
+  'mcp.uploadedOnly':
+    'Your assistant reads scans already uploaded to Dmitri. Your NSPi does not need to be online.',
+  'mcp.accessTitle': 'What can the assistant access?',
+  'mcp.accessData':
+    'Uploaded scans, observed machines, findings, and evidence in your organization.',
+  'mcp.accessMembership':
+    'Access follows your current organization membership.',
+  'mcp.accessReadOnly':
+    'Read only. It cannot start scans, control devices, or change data.',
+  'mcp.accessProvider':
+    'Requested results go to your assistant and its configured model provider.',
+  'mcp.connectionsTitle': 'Connected assistants',
+  'mcp.connectionsHelp':
+    'These connections belong to your account. Disconnecting stops future access.',
+  'mcp.endpoint': 'MCP endpoint',
+  'mcp.empty': 'No assistants connected.',
+  'mcp.loading': 'Loading…',
+  'mcp.retry': 'Try again',
+  'mcp.disconnect': 'Disconnect',
+  'mcp.expires': 'Expires',
+  'mcp.loadError': "Couldn't load assistant connections.",
+  'mcp.disconnectError': "Couldn't disconnect that assistant.",
+  'mcp.connectTitle': 'Connect an assistant',
+  'mcp.client': 'Client name (provided by the client)',
+  'mcp.account': 'Account',
+  'mcp.organization': 'Organization',
+  'mcp.callback': 'Local callback',
+  'mcp.consent':
+    'Allow this client to read scans, machines, findings and industrial observations from this organization. It cannot change your data or control devices.',
+  'mcp.disclosure':
+    'Requested results will be shared with your assistant and its model provider. Approve only a connection you started. Access expires after 30 days and can be revoked in Settings.',
+  'mcp.allow': 'Allow read access',
+  'mcp.deny': 'Decline',
+  'mcp.connecting': 'Returning to your assistant…',
+  'mcp.connectError': "Couldn't complete this connection. Try again.",
+  'mcp.requestError':
+    'This connection request is invalid or expired. Start a new connection from your assistant.',
+  'mcp.back': 'Back to Settings',
   'nav.home': 'Home',
   'nav.scans': 'Scans',
   'nav.network': 'Network',

@@ -8,6 +8,77 @@ const SEVERITY: Record<string, string> = {
 }
 
 export const catalog: Catalog = {
+  'mcp.title': 'MCP',
+  'mcp.description': 'Use suas varreduras no Codex ou Claude Code.',
+  'mcp.scope': ({ organization }) =>
+    `${organization} · Acesso somente de leitura à sua organização`,
+  'mcp.chooseClient': 'Escolha seu assistente',
+  'mcp.addServer': 'Adicione o Dmitri no terminal',
+  'mcp.terminalHelp':
+    'Com a CLI do assistente instalada, execute este comando no seu computador.',
+  'mcp.copyAddCommand': 'Copiar comando para adicionar servidor',
+  'mcp.copyLoginCommand': 'Copiar comando de autenticação',
+  'mcp.commandCopied': 'Comando copiado.',
+  'mcp.copyError':
+    'Não foi possível copiar. Selecione o texto e copie manualmente.',
+  'mcp.signIn': 'Entre no Dmitri',
+  'mcp.codexLoginHelp': 'Execute este comando para entrar pelo navegador.',
+  'mcp.claudeLoginHelp':
+    'Abra o Claude Code, execute /mcp, selecione Dmitri e escolha Authenticate.',
+  'mcp.signInHelp':
+    'Entre com sua conta Dmitri. Confira sua organização e aprove o acesso de leitura. Volte aqui para ver sua conexão.',
+  'mcp.tryPrompts': 'Depois, pergunte ao assistente',
+  'mcp.promptHelp': ({ client }) => `Copie uma pergunta para o ${client}.`,
+  'mcp.copyPrompt': ({ prompt }) => `Copiar pergunta: ${prompt}`,
+  'mcp.promptCopied': 'Pergunta copiada. Cole no seu assistente.',
+  'mcp.prompt.scan': 'Resuma minha última varredura NSPi.',
+  'mcp.prompt.modbus': 'Quais máquinas expõem Modbus?',
+  'mcp.prompt.findings': 'Mostre os achados e suas evidências.',
+  'mcp.promptText.scan':
+    'Use o MCP do Dmitri para mostrar minha última varredura NSPi. Resuma as máquinas encontradas e cite a varredura.',
+  'mcp.promptText.modbus':
+    'Use o MCP do Dmitri para encontrar máquinas com serviços Modbus na minha última varredura NSPi. Cite as observações e informe lacunas de evidência ou cobertura.',
+  'mcp.promptText.findings':
+    'Use o MCP do Dmitri para mostrar os achados da minha última varredura concluída, com evidências e links para o Dmitri.',
+  'mcp.uploadedOnly':
+    'Seu assistente consulta varreduras já enviadas ao Dmitri. Seu NSPi não precisa estar online.',
+  'mcp.accessTitle': 'O que o assistente pode acessar?',
+  'mcp.accessData':
+    'Varreduras enviadas, máquinas observadas, achados e evidências da sua organização.',
+  'mcp.accessMembership':
+    'O acesso depende do seu vínculo atual com a organização.',
+  'mcp.accessReadOnly':
+    'Somente leitura. Não pode iniciar varreduras, controlar dispositivos ou alterar dados.',
+  'mcp.accessProvider':
+    'Os resultados solicitados vão para seu assistente e o provedor de modelo configurado.',
+  'mcp.connectionsTitle': 'Assistentes conectados',
+  'mcp.connectionsHelp':
+    'Estas conexões pertencem à sua conta. Desconectar encerra o acesso futuro.',
+  'mcp.endpoint': 'Endereço MCP',
+  'mcp.empty': 'Nenhum assistente conectado.',
+  'mcp.loading': 'Carregando…',
+  'mcp.retry': 'Tentar novamente',
+  'mcp.disconnect': 'Desconectar',
+  'mcp.expires': 'Expira em',
+  'mcp.loadError': 'Não foi possível carregar as conexões dos assistentes.',
+  'mcp.disconnectError': 'Não foi possível desconectar esse assistente.',
+  'mcp.connectTitle': 'Conectar um assistente',
+  'mcp.client': 'Nome do cliente (informado pelo cliente)',
+  'mcp.account': 'Conta',
+  'mcp.organization': 'Organização',
+  'mcp.callback': 'Retorno local',
+  'mcp.consent':
+    'Permitir que este cliente consulte varreduras, máquinas, achados e observações industriais desta organização. Ele não pode alterar seus dados nem controlar dispositivos.',
+  'mcp.disclosure':
+    'Os resultados solicitados serão compartilhados com seu assistente e o provedor do modelo. Aprove apenas uma conexão que você iniciou. O acesso expira após 30 dias e pode ser revogado nas Configurações.',
+  'mcp.allow': 'Permitir acesso de leitura',
+  'mcp.deny': 'Recusar',
+  'mcp.connecting': 'Voltando ao assistente…',
+  'mcp.connectError':
+    'Não foi possível concluir esta conexão. Tente novamente.',
+  'mcp.requestError':
+    'Esta solicitação é inválida ou expirou. Inicie uma nova conexão pelo assistente.',
+  'mcp.back': 'Voltar às Configurações',
   'nav.home': 'Início',
   'nav.scans': 'Varreduras',
   'nav.network': 'Rede',
