@@ -48,3 +48,20 @@ export async function getContextAIHistory(
   )
   return response.data
 }
+
+export type AIExplanationResponse =
+  | components['schemas']['ScanExplanationResponse']
+  | components['schemas']['MachineExplanationResponse']
+export type AIExplainRequest = components['schemas']['AIExplainRequest']
+
+export async function explainAIContext(
+  payload: AIExplainRequest,
+  signal?: AbortSignal,
+): Promise<AIExplanationResponse> {
+  const response = await apiClient.post<AIExplanationResponse>(
+    '/ai/explain',
+    payload,
+    { signal },
+  )
+  return response.data
+}

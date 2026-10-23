@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router'
 import { BotIcon } from 'lucide-react'
 import ContextChat from '@/components/ContextChat'
@@ -9,43 +9,44 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from '@/components/ui/dialog'
 import useI18n from '@/i18n/useI18n'
-
-type AssistantContext = {
-  scope: 'scan' | 'host'
-  contextId: string
-  label: string
-}
 
 function GlobalAssistant() {
   const location = useLocation()
   const [open, setOpen] = useState(false)
   const { t } = useI18n()
-  const context = useMemo<AssistantContext | null>(() => {
-    const scanMatch = location.pathname.match(/^\/scans\/([^/]+)$/)
-    if (scanMatch) {
-      return { scope: 'scan', contextId: scanMatch[1], label: t('ai.thisScan') }
-    }
-    const hostMatch = location.pathname.match(/^\/network\/([^/]+)$/)
-    if (hostMatch) {
+  const context = useMemo(() => {
+    const scan = location.pathname.match(/^\/scans\/([^/]+)$/)
+    if (scan)
       return {
-        scope: 'host',
-        contextId: hostMatch[1],
+        scope: 'scan' as const,
+        contextId: scan[1],
+        label: t('ai.thisScan'),
+      }
+    const host = location.pathname.match(/^\/network\/([^/]+)$/)
+    if (host)
+      return {
+        scope: 'host' as const,
+        contextId: host[1],
         label: t('ai.thisHost'),
       }
-    }
     return null
   }, [location.pathname, t])
-
+  useEffect(() => {
+    const show = () => setOpen(true)
+    window.addEventListener('dmitri:assistant-open', show)
+    return () => window.removeEventListener('dmitri:assistant-open', show)
+  }, [])
   if (!context) return null
-
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
-          className="fixed right-6 bottom-6 z-40 shadow-lg"
+          variant="outline"
           aria-label={t('ai.openAssistant')}
+          data-testid="top-bar-assistant"
         >
           <BotIcon aria-hidden="true" />
           {t('ai.assistant')}
@@ -53,17 +54,22 @@ function GlobalAssistant() {
       </DialogTrigger>
       <DialogContent className="max-h-assistant-dialog overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{t('ai.askDmitri')}</DialogTitle>
+          <DialogTitle className="text-title-sm">
+            {t('ai.askDmitri')}
+          </DialogTitle>
+          <DialogDescription className="text-caption-md text-ink-muted">
+            {t('assistant.about', { label: context.label })}
+          </DialogDescription>
         </DialogHeader>
         <ContextChat
           key={`${context.scope}:${context.contextId}`}
           scope={context.scope}
           contextId={context.contextId}
-          title={t('ai.askAbout', { label: context.label })}
+          compact
+          questionPlaceholder={t('ai.placeholder')}
         />
       </DialogContent>
     </Dialog>
   )
 }
-
 export default GlobalAssistant

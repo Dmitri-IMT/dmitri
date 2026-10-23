@@ -49,7 +49,12 @@ function renderInline(text: string): ReactNode[] {
           variant="link"
           className="h-auto p-0 text-body-md"
         >
-          <a href={match[3]} target="_blank" rel="noreferrer noopener">
+          <a
+            data-testid="assistant-source-link"
+            href={match[3]}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
             {match[2]}
           </a>
         </Button>,

@@ -9,6 +9,11 @@ export const server = setupServer(...handlers)
 
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' })
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
   Element.prototype.hasPointerCapture = () => false
   Element.prototype.setPointerCapture = () => {}
   Element.prototype.releasePointerCapture = () => {}

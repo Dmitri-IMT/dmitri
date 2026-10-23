@@ -26,6 +26,12 @@ export const queryKeys = {
       ['scans', 'analysis', scanId, language] as const,
   },
   ai: {
+    explanation: (
+      scope: string,
+      contextId: string,
+      language: string,
+      scanId: string,
+    ) => ['ai', 'explanation', scope, contextId, language, scanId] as const,
     usage: (limit: number) => ['ai', 'usage', limit] as const,
   },
   hosts: {

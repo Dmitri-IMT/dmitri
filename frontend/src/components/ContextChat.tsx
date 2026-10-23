@@ -11,11 +11,14 @@ import WaitingState from '@/components/WaitingState'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/useToast'
 import useI18n from '@/i18n/useI18n'
 import { readAiAskError } from '@/api/readAiAskError'
 
 type Props = {
+  compact?: boolean
   scope: AIContextScope
   contextId: string
   title?: string
@@ -28,6 +31,7 @@ type Props = {
 
 export default function ContextChat({
   scope,
+  compact = false,
   contextId,
   title,
   questionPlaceholder,
@@ -110,13 +114,18 @@ export default function ContextChat({
   }
 
   return (
-    <Card data-testid="context-chat">
-      <CardHeader>
-        <h2 className="text-title-sm">{resolvedTitle}</h2>
-        <p className="text-body-sm text-muted-foreground">
-          {t('ai.contextHint')}
-        </p>
-      </CardHeader>
+    <Card
+      data-testid="context-chat"
+      className={compact ? 'border-0 bg-transparent shadow-none' : undefined}
+    >
+      {!compact && (
+        <CardHeader>
+          <h2 className="text-title-sm">{resolvedTitle}</h2>
+          <p className="text-body-sm text-muted-foreground">
+            {t('ai.contextHint')}
+          </p>
+        </CardHeader>
+      )}
       <CardContent className="flex flex-col gap-4">
         {!oneShot && (
           <Button
@@ -148,21 +157,40 @@ export default function ContextChat({
             </Button>
           )
         ) : (
-          <form className="flex flex-col gap-3" onSubmit={submit}>
+          <form
+            className={cn(
+              'flex gap-3',
+              compact
+                ? 'order-last items-end border-t border-rule pt-4'
+                : 'flex-col',
+            )}
+            onSubmit={submit}
+          >
             <label
-              className="text-body-sm"
+              className={compact ? 'sr-only' : 'text-body-sm'}
               htmlFor={`${scope}-context-question`}
             >
               {t('ai.question')}
             </label>
-            <Textarea
-              id={`${scope}-context-question`}
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              placeholder={resolvedPlaceholder}
-              maxLength={1000}
-              disabled={sending}
-            />
+            {compact ? (
+              <Input
+                id={`${scope}-context-question`}
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                placeholder={resolvedPlaceholder}
+                maxLength={1000}
+                disabled={sending}
+              />
+            ) : (
+              <Textarea
+                id={`${scope}-context-question`}
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                placeholder={resolvedPlaceholder}
+                maxLength={1000}
+                disabled={sending}
+              />
+            )}
             <Button
               type="submit"
               size="sm"
@@ -192,18 +220,16 @@ export default function ContextChat({
         )}
         {visibleMessages.map((message) => (
           <div
-            className="flex flex-col gap-3 rounded-md border border-border p-4"
+            className="flex flex-col gap-4"
             aria-live="polite"
             key={message.message_id}
           >
             {!oneShot && (
-              <div>
-                <p className="text-body-sm font-medium">{t('ai.question')}</p>
-                <p className="text-body-md">{message.question}</p>
+              <div className="max-w-100 self-end rounded-lg border border-rule bg-canvas px-4 py-3 text-body-md">
+                {message.question}
               </div>
             )}
-            <div>
-              <p className="text-body-sm font-medium">{t('ai.answer')}</p>
+            <div className="max-w-120 text-body-md">
               <ChatAnswer text={message.answer} />
             </div>
             {message.uncertainties.length > 0 && (

@@ -112,6 +112,7 @@ function TaskRow({
   }
   return (
     <li
+      id={`todo-task-${task.rank}`}
       data-testid={`todo-task-${task.rank}`}
       className="flex flex-col gap-2 border-t border-rule py-4 last:border-b"
     >
@@ -384,6 +385,11 @@ function TodoList({
           {uncovered > 0 && (
             <p className="text-body-sm text-ink-muted">
               {t('todo.uncovered', { count: uncovered })}
+            </p>
+          )}
+          {data.analysis.not_checked && (
+            <p className="text-body-sm text-ink-muted">
+              {data.analysis.not_checked}
             </p>
           )}
           <p className="text-caption-md text-ink-muted">{t('todo.footer')}</p>

@@ -12,7 +12,8 @@ type ListFindingsQuery = NonNullable<
 // before the scan id lands; `skipToken` there keeps the unfiltered read unsent.
 export type FindingListParams =
   | { [Key in 'scan_id' | 'severity' | 'per_page']: ListFindingsQuery[Key] }
-  | Required<Pick<ListFindingsQuery, 'host_id' | 'per_page'>>
+  | (Required<Pick<ListFindingsQuery, 'host_id' | 'per_page'>> &
+      Pick<ListFindingsQuery, 'scan_id' | 'page'>)
 
 // Order is load-bearing: the home deck shows critical findings before high ones.
 export const HOME_SEVERITIES = [
