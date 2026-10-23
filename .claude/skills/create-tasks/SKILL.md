@@ -17,19 +17,18 @@ argument-hint: "Path to spec directory (e.g. specs/005-extensive-scan)"
 Phase 2 of the Dmitri document-driven pipeline. You read the **human-approved flat
 Peirce specs** and write **`TASKS.md` as a file** in the spec directory. You do **not**
 implement application code and you do **not** create harness tasks — `TASKS.md` is the
-ledger the **`feature-orchestrator`** drives.
+ledger the per-task build loop drives.
 
 ## Pipeline position
 
 ```
-/feature-planning  → flat specs written → [human approval gate]
+specs written       → flat specs → [human approval gate]
 /refine-specs      → optional grilling before approval
 /create-tasks      → writes specs/NNN-…/TASKS.md   ← you are here
-/feature-orchestrator → runs the per-task Coder → Tester → Reviewer loop on TASKS.md
+build loop         → runs the per-task Coder → Tester → Reviewer loop on TASKS.md
 ```
 
-`feature-orchestrator`'s Phase 2 expects a `TASKS.md` in the spec dir. This skill writes
-it. (If `/create-tasks` is skipped, the orchestrator writes the same shape inline.)
+The build loop expects a `TASKS.md` in the spec dir. This skill writes it.
 
 ## Inputs
 
@@ -177,7 +176,7 @@ bypass `ScanOrchestrator.run()`, so a parameter that isn't threaded reaches no T
 
 Print the path you wrote and a short summary: total task count, parallel tracks, which tasks
 are **unblocked now**, and — when step 3 merged anything — what was absorbed and into what.
-Then tell the operator the next step is **`/feature-orchestrator`**.
+Then tell the operator the next step is the per-task build loop.
 
 ## Rules
 

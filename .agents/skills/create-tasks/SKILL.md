@@ -25,4 +25,4 @@ Account for all integration call paths, including `ScanRunner` and `ScanProgress
 adding a scan parameter. Finish with a dependency graph and status table.
 
 Report the path written, task count, parallel tracks if any, unblocked tasks, and the next step:
-`feature-orchestrator`.
+the per-task build loop.

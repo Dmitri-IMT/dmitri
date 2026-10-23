@@ -93,6 +93,6 @@
 - **Integration rule:** `ScanRunner` (`scanner/runner.py`) bypasses `ScanOrchestrator.run()` —
   thread any new orchestrator/runner parameter through `ScanRunner` and `ScanProgressScreen`
   too (see `.claude/CLAUDE.md`).
-- **Specs:** new features are planned with `/feature-planning` (flat docs under
-  `specs/NNN-feature-slug/`); see `.claude/docs/pipeline.md`.
+- **Specs:** new features are planned as flat docs under
+  `specs/NNN-feature-slug/`; see `.claude/docs/pipeline.md`.
 - Keep docs short — code-first, no filler.

@@ -3,8 +3,8 @@ name: frontend-test-engineer
 description: >-
   Adds or updates Vitest + Testing Library + MSW tests for the files a coder changed in one
   TASKS.md task, in frontend/ (React 19 + TypeScript + Vite). Mirrors existing test patterns
-  under frontend/src/, asserts user-visible behavior over implementation detail. Spawned by the
-  feature-orchestrator after the agent-developer, for frontend-layer features only — the Python
+  under frontend/src/, asserts user-visible behavior over implementation detail. Spawned for one TASKS.md
+  task after the agent-developer, for frontend-layer features only — the Python
   test-engineer handles hardware-agent/ and backend/.
 readonly: false
 ---

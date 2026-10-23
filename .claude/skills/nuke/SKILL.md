@@ -20,7 +20,7 @@ worsened**. Pre-existing debt is out of scope unless the diff made it harder to 
 
 | Run | Do not run |
 |-----|------------|
-| Human explicitly says `nuke` / `/nuke` | During `/feature-planning`, `/feature-orchestrator`, or per-task review |
+| Human explicitly says `nuke` / `/nuke` | During spec planning, the per-task build loop, or per-task review |
 | Feature work finished; `uv run pytest` already green | Mid-task or "while implementing" |
 | Immediately before push to `main` | To block or replace the `code-reviewer` subagent |
 
@@ -114,6 +114,6 @@ scope creep.
 
 | Piece | Nuke |
 |-------|------|
-| `feature-orchestrator` | Not wired — orchestrator must not spawn nuke |
+| Per-task build loop | Not wired — the loop must not spawn nuke |
 | `code-reviewer` subagent | Separate; nuke does not replace it |
 | Human workflow | plan → orchestrate → review loop → tests green → **nuke** → **commit** → **create-pr** |

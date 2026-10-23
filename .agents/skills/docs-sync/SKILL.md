@@ -6,7 +6,7 @@ description: >-
   for docs/ it delegates to architecture-adr-sync / roadmap-sync / openapi-contract-sync and only
   patches unambiguous factual drift — except docs/DEV-SETUP.md, the local-run walkthrough, which it
   owns and updates whenever a setup command, route, env var, port or gate changes.
-  Run once at the end of the feature-orchestrator pipeline, or
+  Run once at the end of the feature pipeline, or
   manually via /docs-sync when code has moved and the docs or scripts may be stale.
 ---
 

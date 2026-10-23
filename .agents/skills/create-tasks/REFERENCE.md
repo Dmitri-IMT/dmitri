@@ -146,5 +146,5 @@ Fill the canonical orchestrator shape (matches `specs/_templates/TASKS.md`):
 ```
 
 Then close `TASKS.md` with the dependency graph and status table from the template. Leave
-`Status: PENDING` and `Review Rejections: 0` untouched — the `feature-orchestrator` owns
+`Status: PENDING` and `Review Rejections: 0` untouched — the per-task build loop owns
 those fields once the build starts.

@@ -3,7 +3,7 @@ name: test-engineer
 description: >-
   Adds or updates pytest / pytest-asyncio tests for the files a coder changed in one TASKS.md
   task. Mirrors existing test patterns under hardware-agent/tests/, asserts behavior over
-  snapshots. Spawned by the feature-orchestrator after the agent-developer.
+  snapshots. Spawned for one TASKS.md task, after the agent-developer.
 readonly: false
 ---
 
