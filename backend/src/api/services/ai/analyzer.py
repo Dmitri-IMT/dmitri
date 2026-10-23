@@ -7,7 +7,7 @@ from api.schemas.ai import (
     ProviderScanAIChildAnalysis,
 )
 from api.services.ai.context import ScanAIContext
-from api.services.ai.groq import AIProviderError
+from api.services.ai.openai_responses import AIProviderError
 from api.services.ai.providers import (
     BoundedScanAnalysisProvider,
     ScanAnalysisProvider,

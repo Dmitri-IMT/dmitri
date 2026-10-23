@@ -21,7 +21,7 @@ from api.services.ai.chat import (
     build_scan_chat_bundle,
     materialize_chat_response,
 )
-from api.services.ai.groq import AIProviderError
+from api.services.ai.openai_responses import AIProviderError
 
 
 def _finding(

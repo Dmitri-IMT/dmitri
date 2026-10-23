@@ -24,12 +24,12 @@ from api.schemas.read import (
 )
 from api.schemas.reports import ReportKind, ScanReportResponse
 from api.schemas.scan import ScanIngestAcceptedResponse, ScanIngestRequest
-from api.services.ai.groq import GROQ_PROVIDER_ID, ai_is_available
 from api.services.ai.jobs import (
     AIAnalysisAlreadyRequestedError,
     get_scan_ai_analysis,
     request_scan_ai_analysis,
 )
+from api.services.ai.openai_responses import OPENAI_PROVIDER_ID, ai_is_available
 from api.services.deletion import ScanRunningError, delete_all_scans, delete_scan
 from api.services.persistence import ScanClosedError, ScanOwnershipError, ingest_scan
 from api.services.read import get_scan_detail, get_scan_risk_summary, list_scans
@@ -198,7 +198,7 @@ def request_scan_ai_analysis_route(
             scan_id,
             org_id=caller.org_id,
             ai_enabled=ai_is_available(settings),
-            provider_name=GROQ_PROVIDER_ID,
+            provider_name=OPENAI_PROVIDER_ID,
             model=settings.ai_model,
             language=language,
         )

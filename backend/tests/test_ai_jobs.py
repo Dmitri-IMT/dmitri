@@ -20,8 +20,8 @@ from api.schemas.read import (
 )
 from api.services.ai.analyzer import validate_analysis_with_repair
 from api.services.ai.context import AIFindingContext, ScanAIContext
-from api.services.ai.groq import AIProviderError
 from api.services.ai.jobs import process_ready_ai_analyses
+from api.services.ai.openai_responses import AIProviderError
 from api.services.worker import run_ai_worker_once
 from pydantic import ValidationError
 from read_factories import (

@@ -35,7 +35,7 @@ from api.services.ai.context import (
     reference_names,
     replace_ai_references,
 )
-from api.services.ai.groq import AIProviderError
+from api.services.ai.openai_responses import AIProviderError
 from api.services.scan_evidence import (
     incomplete_check_count,
     summarize_finding_evidence,

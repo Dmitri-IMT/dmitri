@@ -21,16 +21,9 @@ from api.services.ai.writing import WRITING_SKILL_INSTRUCTIONS
 
 _ProviderResponseT = TypeVar("_ProviderResponseT", bound=BaseModel)
 
-GROQ_PROVIDER_ID = "groq"
+OPENAI_PROVIDER_ID = "openai"
+OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 AI_PROMPT_VERSION = "7"
-
-# Keep scan analysis well below Groq's shared per-minute token budget. The
-# configured global completion limit is intended for interactive requests; a
-# bounded scan analysis makes several calls and must use smaller per-call caps.
-SCAN_ANALYSIS_MAX_OUTPUT_TOKENS = 2_048
-SCAN_CHUNK_MAX_OUTPUT_TOKENS = 1_536
-SCAN_SYNTHESIS_MAX_OUTPUT_TOKENS = 1_200
-SCAN_REPAIR_MAX_OUTPUT_TOKENS = 1_536
 
 SYSTEM_PROMPT = """You are an auxiliary defensive security analyst.
 The Dmitri system has already determined all technical facts in the supplied
@@ -147,7 +140,7 @@ class AIProviderError(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
-class GroqUsageEvent:
+class ProviderUsageEvent:
     operation: str
     model: str
     status: str
@@ -158,15 +151,16 @@ class GroqUsageEvent:
     http_status: int | None = None
     request_id: str | None = None
     error_code: str | None = None
+    cached_input_tokens: int | None = None
+    reasoning_tokens: int | None = None
 
 
-class GroqProvider:
+class OpenAIResponsesProvider:
     def __init__(
         self,
         *,
         api_key: str,
         model: str,
-        base_url: str,
         timeout_seconds: float,
         max_output_tokens: int,
         reasoning_effort: str,
@@ -174,14 +168,13 @@ class GroqProvider:
     ) -> None:
         self.api_key = api_key
         self.model = model
-        self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.max_output_tokens = max_output_tokens
         self.reasoning_effort = reasoning_effort
         self.client = client
-        self._usage_events: list[GroqUsageEvent] = []
+        self._usage_events: list[ProviderUsageEvent] = []
 
-    def drain_usage_events(self) -> list[GroqUsageEvent]:
+    def drain_usage_events(self) -> list[ProviderUsageEvent]:
         events, self._usage_events = self._usage_events, []
         return events
 
@@ -196,7 +189,6 @@ class GroqProvider:
             ProviderScanAIAnalysis,
             operation="scan_analysis",
             language=language,
-            max_tokens=min(self.max_output_tokens, SCAN_ANALYSIS_MAX_OUTPUT_TOKENS),
         )
 
     def analyze_chunk(
@@ -210,7 +202,6 @@ class GroqProvider:
             ProviderScanAIChildAnalysis,
             operation="finding_chunk",
             language=language,
-            max_tokens=SCAN_CHUNK_MAX_OUTPUT_TOKENS,
         )
 
     def repair_analysis(
@@ -230,7 +221,6 @@ class GroqProvider:
             ProviderScanAIAnalysis,
             operation="analysis_repair",
             language=language,
-            max_tokens=SCAN_REPAIR_MAX_OUTPUT_TOKENS,
         )
 
     def repair_chunk(
@@ -250,7 +240,6 @@ class GroqProvider:
             ProviderScanAIChildAnalysis,
             operation="chunk_repair",
             language=language,
-            max_tokens=SCAN_REPAIR_MAX_OUTPUT_TOKENS,
         )
 
     def synthesize_scan(
@@ -292,7 +281,6 @@ class GroqProvider:
             ProviderScanAIAnalysis,
             operation="analysis_synthesis",
             language=language,
-            max_tokens=SCAN_SYNTHESIS_MAX_OUTPUT_TOKENS,
         )
 
     def answer_question(
@@ -306,7 +294,6 @@ class GroqProvider:
             operation="chat",
             language=language,
             schema_name="scan_ai_chat",
-            max_tokens=min(self.max_output_tokens, 1200),
         )
 
     def _complete(
@@ -317,25 +304,22 @@ class GroqProvider:
         operation: str,
         language: str,
         schema_name: str = "scan_ai_analysis",
-        max_tokens: int | None = None,
     ) -> _ProviderResponseT:
         payload = {
             "model": self.model,
-            "messages": [
-                {"role": "system", "content": _system_prompt(language)},
-                {"role": "user", "content": user_prompt},
-            ],
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
+            "instructions": _system_prompt(language),
+            "input": user_prompt,
+            "store": False,
+            "reasoning": {"effort": self.reasoning_effort},
+            "max_output_tokens": self.max_output_tokens,
+            "text": {
+                "format": {
+                    "type": "json_schema",
                     "name": schema_name,
                     "strict": True,
                     "schema": response_schema.model_json_schema(),
-                },
+                }
             },
-            "max_completion_tokens": max_tokens or self.max_output_tokens,
-            "reasoning_effort": self.reasoning_effort,
-            "include_reasoning": False,
         }
         try:
             response = self._post(payload, operation=operation)
@@ -349,36 +333,40 @@ class GroqProvider:
 
         try:
             envelope = response.json()
-            content = envelope["choices"][0]["message"]["content"]
-            decoded = json.loads(content)
+        except ValueError as exc:
+            raise AIProviderError(
+                "invalid_provider_response", retryable=False
+            ) from exc
+        try:
+            decoded = json.loads(_output_text(envelope))
             return response_schema.model_validate(decoded)
-        except (
-            KeyError,
-            IndexError,
-            TypeError,
-            json.JSONDecodeError,
-            ValidationError,
-        ) as exc:
-            raise AIProviderError("invalid_provider_response", retryable=True) from exc
+        except (json.JSONDecodeError, ValidationError) as exc:
+            raise AIProviderError(
+                "invalid_provider_response", retryable=False
+            ) from exc
 
     def _post(self, payload: dict[str, object], *, operation: str) -> httpx.Response:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        url = f"{self.base_url}/chat/completions"
         started = time.perf_counter()
         try:
             if self.client is not None:
                 response = self.client.post(
-                    url, headers=headers, json=payload, timeout=self.timeout_seconds
+                    OPENAI_RESPONSES_URL,
+                    headers=headers,
+                    json=payload,
+                    timeout=self.timeout_seconds,
                 )
             else:
                 with httpx.Client(timeout=self.timeout_seconds) as client:
-                    response = client.post(url, headers=headers, json=payload)
+                    response = client.post(
+                        OPENAI_RESPONSES_URL, headers=headers, json=payload
+                    )
         except httpx.TimeoutException:
             self._usage_events.append(
-                GroqUsageEvent(
+                ProviderUsageEvent(
                     operation,
                     self.model,
                     "error",
@@ -389,7 +377,7 @@ class GroqProvider:
             raise
         except httpx.RequestError:
             self._usage_events.append(
-                GroqUsageEvent(
+                ProviderUsageEvent(
                     operation,
                     self.model,
                     "error",
@@ -402,32 +390,75 @@ class GroqProvider:
             response_body = response.json() if response.content else {}
         except ValueError:
             response_body = {}
-        usage = (
-            response_body.get("usage", {})
-            if isinstance(response_body, dict)
-            else {}
-        )
+        if not isinstance(response_body, dict):
+            response_body = {}
+        usage = response_body.get("usage")
+        usage = usage if isinstance(usage, dict) else {}
+        input_details = usage.get("input_tokens_details")
+        output_details = usage.get("output_tokens_details")
         self._usage_events.append(
-            GroqUsageEvent(
+            ProviderUsageEvent(
                 operation,
                 self.model,
                 "success" if response.status_code < 400 else "error",
-                _int_or_none(usage.get("prompt_tokens")),
-                _int_or_none(usage.get("completion_tokens")),
+                _int_or_none(usage.get("input_tokens")),
+                _int_or_none(usage.get("output_tokens")),
                 _int_or_none(usage.get("total_tokens")),
                 _elapsed_ms(started),
                 response.status_code,
                 response.headers.get("x-request-id")
-                or response.headers.get("request-id")
                 or (
                     response_body.get("id")
                     if isinstance(response_body.get("id"), str)
                     else None
                 ),
                 None if response.status_code < 400 else f"http_{response.status_code}",
+                _int_or_none(
+                    input_details.get("cached_tokens")
+                    if isinstance(input_details, dict)
+                    else None
+                ),
+                _int_or_none(
+                    output_details.get("reasoning_tokens")
+                    if isinstance(output_details, dict)
+                    else None
+                ),
             )
         )
         return response
+
+
+def _output_text(envelope: object) -> str:
+    if not isinstance(envelope, dict):
+        raise AIProviderError("invalid_provider_response", retryable=False)
+    status = envelope.get("status")
+    if status == "incomplete":
+        details = envelope.get("incomplete_details")
+        reason = details.get("reason") if isinstance(details, dict) else None
+        if reason == "content_filter":
+            raise AIProviderError("provider_refused", retryable=False)
+        raise AIProviderError("provider_output_truncated", retryable=False)
+    if status != "completed":
+        raise AIProviderError("invalid_provider_response", retryable=False)
+    texts: list[str] = []
+    output = envelope.get("output")
+    for item in output if isinstance(output, list) else []:
+        if not isinstance(item, dict) or item.get("type") != "message":
+            continue
+        content = item.get("content")
+        for part in content if isinstance(content, list) else []:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "refusal":
+                raise AIProviderError("provider_refused", retryable=False)
+            if part.get("type") == "output_text" and isinstance(
+                part.get("text"), str
+            ):
+                texts.append(part["text"])
+    text = "".join(texts)
+    if not text.strip():
+        raise AIProviderError("invalid_provider_response", retryable=False)
+    return text
 
 
 def _system_prompt(language: str) -> str:
@@ -513,40 +544,54 @@ def _int_or_none(value: object) -> int | None:
     return value if isinstance(value, int) else None
 
 
+def _error_code(response: httpx.Response) -> str | None:
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    error = body.get("error") if isinstance(body, dict) else None
+    code = error.get("code") if isinstance(error, dict) else None
+    return code if isinstance(code, str) else None
+
+
 def _http_error(response: httpx.Response) -> AIProviderError:
     status_code = response.status_code
-    if status_code == 413:
-        return AIProviderError(
-            "provider_context_too_large",
-            retryable=False,
-        )
+    error_code = _error_code(response)
+    if status_code == 413 or error_code == "context_length_exceeded":
+        return AIProviderError("provider_context_too_large", retryable=False)
     if status_code in {401, 403}:
         return AIProviderError("provider_authentication_failed", retryable=False)
-    if status_code in {400, 422}:
-        return AIProviderError("invalid_provider_response", retryable=True)
-    if status_code in {408, 499}:
-        return AIProviderError("provider_timeout", retryable=True)
     if status_code == 429:
+        if error_code == "insufficient_quota":
+            return AIProviderError("provider_quota_exceeded", retryable=False)
         return AIProviderError(
             "provider_rate_limited",
             retryable=True,
             retry_after_seconds=_retry_after_seconds(response),
         )
-    if status_code == 498 or status_code >= 500:
+    if status_code == 408:
+        return AIProviderError("provider_timeout", retryable=True)
+    if status_code >= 500:
         return AIProviderError("provider_unavailable", retryable=True)
     return AIProviderError("provider_request_rejected", retryable=False)
 
 
+_DURATION_PART = re.compile(r"([0-9]+(?:\.[0-9]+)?)(ms|s|m|h)")
+
+
 def _retry_after_seconds(response: httpx.Response) -> int:
-    raw = response.headers.get("retry-after") or response.headers.get(
+    retry_after = response.headers.get("retry-after")
+    if retry_after and re.fullmatch(r"\s*[0-9]+(?:\.[0-9]+)?\s*", retry_after):
+        return max(1, math.ceil(float(retry_after)))
+    reset = response.headers.get("x-ratelimit-reset-requests") or response.headers.get(
         "x-ratelimit-reset-tokens"
     )
-    if raw:
-        match = re.fullmatch(r"\s*([0-9]+(?:\.[0-9]+)?)\s*([smh]?)\s*", raw)
-        if match:
-            value = float(match.group(1))
-            multiplier = {"": 1, "s": 1, "m": 60, "h": 3600}[match.group(2)]
-            return max(1, math.ceil(value * multiplier))
+    if reset:
+        parts = _DURATION_PART.findall(reset.strip())
+        if parts and "".join(value + unit for value, unit in parts) == reset.strip():
+            multiplier = {"ms": 0.001, "s": 1, "m": 60, "h": 3600}
+            seconds = sum(float(value) * multiplier[unit] for value, unit in parts)
+            return max(1, math.ceil(seconds))
     return 60
 
 
@@ -563,7 +608,7 @@ def ai_is_available(settings: Settings) -> bool:
     )
 
 
-def build_ai_provider(settings: Settings) -> GroqProvider | None:
+def build_ai_provider(settings: Settings) -> OpenAIResponsesProvider | None:
     if not ai_is_available(settings):
         return None
     assert settings.ai_api_key is not None
@@ -572,10 +617,9 @@ def build_ai_provider(settings: Settings) -> GroqProvider | None:
         if hasattr(settings.ai_api_key, "get_secret_value")
         else str(settings.ai_api_key)
     )
-    return GroqProvider(
+    return OpenAIResponsesProvider(
         api_key=key,
         model=settings.ai_model,
-        base_url=settings.ai_api_base_url,
         timeout_seconds=settings.ai_timeout_seconds,
         max_output_tokens=settings.ai_max_output_tokens,
         reasoning_effort=settings.ai_reasoning_effort,

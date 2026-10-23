@@ -29,7 +29,11 @@ from api.services.ai.chat import (
     save_chat_message,
 )
 from api.services.ai.chat_errors import chat_api_error_message
-from api.services.ai.groq import AIProviderError, ai_is_available, build_ai_provider
+from api.services.ai.openai_responses import (
+    AIProviderError,
+    ai_is_available,
+    build_ai_provider,
+)
 from api.services.ai.telemetry import drain_provider_usage, persist_usage_events
 from api.services.read import (
     get_finding_detail,

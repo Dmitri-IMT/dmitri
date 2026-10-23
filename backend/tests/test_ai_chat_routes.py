@@ -11,7 +11,7 @@ from api.schemas.read import (
     FindingEvidenceSummary,
 )
 from api.services.ai.context import FindingChatContext, HostChatContext
-from api.services.ai.groq import AIProviderError
+from api.services.ai.openai_responses import AIProviderError
 from read_factories import seed_read_graph
 from sqlmodel import select
 
@@ -102,7 +102,7 @@ def test_ai_usage_is_scoped_and_exposes_only_metadata(
     assert all("prompt" not in item for item in body["data"])
 
 
-def test_context_chat_scan_returns_grounded_response_without_calling_groq(
+def test_context_chat_scan_returns_grounded_response_without_calling_the_provider(
     client, administrative_session, actor_headers, monkeypatch
 ):
     seeded = seed_read_graph(administrative_session)

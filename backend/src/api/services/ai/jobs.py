@@ -33,11 +33,11 @@ from api.services.ai.context import (
     build_scan_ai_context,
     materialize_scan_ai_analysis,
 )
-from api.services.ai.groq import (
+from api.services.ai.openai_responses import (
     AI_PROMPT_VERSION,
-    GROQ_PROVIDER_ID,
+    OPENAI_PROVIDER_ID,
     AIProviderError,
-    GroqProvider,
+    OpenAIResponsesProvider,
 )
 from api.services.ai.telemetry import drain_provider_usage, persist_usage_events
 from api.services.ai.validation import (
@@ -220,7 +220,7 @@ def enqueue_auto_scan_analysis(
             scan_id,
             org_id=_scan_org_id(session, scan_id),
             ai_enabled=True,
-            provider_name=GROQ_PROVIDER_ID,
+            provider_name=OPENAI_PROVIDER_ID,
             model=resolved_settings.ai_model,
             language="en",
             commit=commit,
@@ -240,7 +240,7 @@ def _scan_org_id(session: Session, scan_id: UUID) -> UUID:
 def process_ready_ai_analyses(
     session: Session,
     *,
-    provider: GroqProvider,
+    provider: OpenAIResponsesProvider,
     batch_size: int,
     max_findings: int,
     max_attempts: int,
@@ -302,7 +302,7 @@ def _process_claimed_analysis(
     session: Session,
     record: AIScanAnalysisRecord,
     *,
-    provider: GroqProvider,
+    provider: OpenAIResponsesProvider,
     max_findings: int,
     max_attempts: int,
     retry_delay_seconds: float,

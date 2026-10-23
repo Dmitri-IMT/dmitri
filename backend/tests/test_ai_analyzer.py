@@ -15,7 +15,7 @@ from api.schemas.read import (
 )
 from api.services.ai.analyzer import run_bounded_analysis, split_context
 from api.services.ai.context import AIFindingContext, ScanAIContext
-from api.services.ai.groq import AIProviderError
+from api.services.ai.openai_responses import AIProviderError
 
 
 def _context() -> ScanAIContext:

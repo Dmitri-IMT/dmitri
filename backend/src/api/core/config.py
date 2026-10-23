@@ -26,22 +26,18 @@ class Settings(BaseSettings):
     database_url: SecretStr = Field(alias="DATABASE_URL")
     ai_enabled: bool = Field(default=False, alias="AI_ENABLED")
     ai_auto_analysis: bool = Field(default=False, alias="AI_AUTO_ANALYSIS")
-    ai_model: str = Field(default="openai/gpt-oss-120b", alias="AI_MODEL")
+    ai_model: str = Field(default="gpt-6-luna", alias="AI_MODEL")
     ai_api_key: SecretStr | None = Field(default=None, alias="AI_API_KEY")
-    ai_api_base_url: str = Field(
-        default="https://api.groq.com/openai/v1",
-        alias="AI_API_BASE_URL",
-    )
     ai_max_findings: int = Field(default=10, ge=1, le=15, alias="AI_MAX_FINDINGS")
     ai_timeout_seconds: float = Field(
-        default=30.0, gt=0, le=120, alias="AI_TIMEOUT_SECONDS"
+        default=120.0, gt=0, le=600, alias="AI_TIMEOUT_SECONDS"
     )
     ai_max_output_tokens: int = Field(
-        default=4096, ge=256, le=8192, alias="AI_MAX_OUTPUT_TOKENS"
+        default=25_000, ge=256, le=128_000, alias="AI_MAX_OUTPUT_TOKENS"
     )
-    ai_reasoning_effort: Literal["low", "medium", "high"] = Field(
-        default="low", alias="AI_REASONING_EFFORT"
-    )
+    ai_reasoning_effort: Literal[
+        "none", "low", "medium", "high", "xhigh", "max"
+    ] = Field(default="high", alias="AI_REASONING_EFFORT")
     ai_max_attempts: int = Field(default=2, ge=1, le=5, alias="AI_MAX_ATTEMPTS")
     ai_retry_delay_seconds: float = Field(
         default=30.0, ge=0, le=3600, alias="AI_RETRY_DELAY_SECONDS"
